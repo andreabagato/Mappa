@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Isobate – test a livelli di dettaglio</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+ *{box-sizing:border-box} html,body{height:100%;margin:0}
+ body{font-family:"Segoe UI",Helvetica,Arial,sans-serif;color:#0e2230;display:flex;flex-direction:column}
+ header{padding:10px 16px;background:#08414f;color:#fff;font-size:17px;font-weight:600}
+ main{flex:1;display:flex;min-height:0} #map{flex:1;min-width:0}
+ aside{width:320px;overflow-y:auto;padding:14px;border-right:1px solid #cfdde3;font-size:14px;line-height:1.45}
+ h2{font-size:14px;margin:16px 0 6px} h2:first-child{margin-top:0}
+ input[type=text]{width:100%;padding:7px;border:1px solid #cfdde3;border-radius:6px;font:inherit}
+ button{margin-top:8px;padding:8px 14px;border:0;border-radius:6px;background:#0b5d73;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+ label{display:flex;gap:8px;align-items:center;margin:6px 0}
+ #status{margin-top:12px;padding:8px 10px;border-radius:6px;background:#f3f7f8;border:1px solid #cfdde3;font-size:13px;white-space:pre-line}
+ .warn{margin-top:14px;padding:8px 10px;border-radius:6px;background:#fff4d6;color:#6b4b00;font-size:12.5px}
+ .leaflet-tooltip.d{font-weight:700;background:#08414f;color:#fff;border:0}
+ @media(max-width:760px){main{flex-direction:column-reverse} aside{width:100%;height:42%}}
+</style>
+</head>
+<body>
+<header>Isobate – test a livelli di dettaglio (Campania – Sardegna)</header>
+<main>
+<aside>
+ <h2>Profondità da disegnare (m)</h2>
+ <input type="text" id="levels" value="5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500, 1000, 2000">
+ <label><input type="checkbox" id="bands" checked> Colora per profondità</label>
+ <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
+ <label style="display:block">Trasparenza dei colori<input type="range" id="op" min="0" max="100" value="50" style="width:100%"></label>
+ <button id="redraw">Ridisegna</button>
+ <h2>Livelli di dettaglio</h2>
+ <p>Si caricano da soli in base allo zoom: base su tutto il mare, poi medio (da zoom 8) e fine (da zoom 10), solo dove il fondale è meno profondo.</p>
+ <div id="status">Carico l'elenco dei tasselli…</div>
+ <div class="warn"><b>Solo prova di valutazione.</b> Dati EMODnet, celle fino a ~100 m, quote riferite a LAT. Non usare per la navigazione né per la sicurezza in mare.</div>
+</aside>
+<div id="map"></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+var map=L.map('map').setView([40.2,12.6],7);
+var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Immagini © Esri'}).addTo(map);
+var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+L.control.layers({'Satellite':sat,'Mappa':osm},null).addTo(map);
+map.attributionControl.addAttribution('Batimetria © EMODnet · costa © OpenStreetMap');
+map.createPane('bands').style.zIndex=350; map.getPane('bands').style.opacity=0.5;
+map.createPane('isolines').style.zIndex=450;
+var lineR=L.canvas({pane:'isolines'}), osmG=L.layerGroup().addTo(map);
+var T=null, avail={}, coastAvail={}, store={}, coastLoaded={}, coastWays=[], bytes=0, N=241;
+var LV={C:{s:16,z:0,o:0},M:{s:4,z:8,o:1},F:{s:1,z:10,o:2}};
+var KIND={rock:'Scoglio',wreck:'Relitto',obstruction:'Ostacolo',reef:'Scogliera/secca',shoal:'Secca'};
+var statusEl=document.getElementById('status');
+function say(m){statusEl.textContent=m;}
+function mercX(lon){return (lon+180)/360;}
+function mercY(lat){var s=Math.sin(lat*Math.PI/180);return 0.5-Math.log((1+s)/(1-s))/(4*Math.PI);}
+
+// --- funzioni di calcolo (costa e riempimento) ---
+function dilate(src,nx,ny,K){
+ var out=new Float32Array(src),dist=new Int16Array(nx*ny).fill(-1),q=new Int32Array(nx*ny),h=0,t=0,i;
+ for(i=0;i<src.length;i++) if(src[i]>0){dist[i]=0;q[t++]=i;}
+ while(h<t){var c=q[h++],d=dist[c];if(d>=K)continue;var cx=c%nx,cy=(c-cx)/nx;
+  for(var dy=-1;dy<=1;dy++)for(var dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;var x=cx+dx,y=cy+dy;
+   if(x<0||y<0||x>=nx||y>=ny)continue;var n=y*nx+x;if(dist[n]!==-1)continue;dist[n]=d+1;out[n]=out[c];q[t++]=n;}}
+ return out;
+}
+function landSpans(ways,W,H,ox,oy,zp){
+ var rows=new Array(H),spans=[];
+ ways.forEach(function(w){var p=w.m;
+  for(var i=0;i<p.length-2;i+=2){
+   var x1=p[i]*zp-ox,y1=p[i+1]*zp-oy,x2=p[i+2]*zp-ox,y2=p[i+3]*zp-oy;if(y1===y2)continue;
+   var a=Math.min(y1,y2),b=Math.max(y1,y2);if(b<0||a>=H)continue;
+   var r0=Math.max(0,Math.ceil(a-0.5)),r1=Math.min(H-1,Math.ceil(b-0.5)-1),north=y2<y1;
+   for(var r=r0;r<=r1;r++){var yc=r+0.5;(rows[r]||(rows[r]=[])).push([x1+(yc-y1)*(x2-x1)/(y2-y1),north?1:0]);}}});
+ for(var r=0;r<H;r++){var cr=rows[r];if(!cr)continue;cr.sort(function(a,b){return a[0]-b[0];});
+  var ls=(cr[0][1]===1)?-Infinity:null;
+  for(var k=0;k<cr.length;k++){
+   if(cr[k][1]===1){if(ls!==null){spans.push(r,ls,cr[k][0]);ls=null;}}
+   else if(ls===null)ls=cr[k][0];}
+  if(ls!==null)spans.push(r,ls,Infinity);}
+ return spans;
+}
+function isLandAt(lat,lon){
+ var best=Infinity,north=null;
+ coastWays.forEach(function(w){var p=w.ll;
+  for(var i=0;i<p.length-2;i+=2){var la1=p[i],lo1=p[i+1],la2=p[i+2],lo2=p[i+3];
+   if((la1<=lat&&la2>lat)||(la2<=lat&&la1>lat)){var x=lo1+(lat-la1)*(lo2-lo1)/(la2-la1);if(x>lon&&x<best){best=x;north=la2>la1;}}}});
+ return north;
+}
+
+// --- tasselli ---
+function geo(L,ti,tj){var s=LV[L].s,st=240*s/960;
+ return {lat0:T.lat0+(ti+1)*st,lon0:T.lon0+tj*st,d:s/960};}
+function parseLevels(){
+ var v=document.getElementById('levels').value.split(/[;,\s]+/).map(parseFloat).filter(function(x){return !isNaN(x)&&x>0;});
+ return Array.from(new Set(v)).sort(function(a,b){return a-b;});}
+function bandColor(d){return d3.interpolateRgb('#c9f0f2','#082a5c')(Math.min(1,Math.sqrt(d/250)));}
+function buildGeom(rec){
+ var g=rec.g,gen=d3.contours().size([N,N]).smooth(true),eps=1e-6,bands=[],lines=[];
+ var d=rec.fill||rec.depth;
+ function pack(pts){var a=new Float64Array(pts.length*2),b=[Infinity,Infinity,-Infinity,-Infinity];
+  pts.forEach(function(p,i){var x=mercX(g.lon0+(p[0]-0.5)*g.d),y=mercY(g.lat0-(p[1]-0.5)*g.d);
+   a[2*i]=x;a[2*i+1]=y;if(x<b[0])b[0]=x;if(y<b[1])b[1]=y;if(x>b[2])b[2]=x;if(y>b[3])b[3]=y;});
+  return {p:a,b:b};}
+ function edge(p){return p[0]<=eps||p[0]>=N-eps||p[1]<=eps||p[1]>=N-eps;}
+ function same(a,b){return (a[0]<=eps&&b[0]<=eps)||(a[0]>=N-eps&&b[0]>=N-eps)||(a[1]<=eps&&b[1]<=eps)||(a[1]>=N-eps&&b[1]>=N-eps);}
+ [0].concat(parseLevels()).forEach(function(lv){
+  var mp=gen.contour(d,lv);if(!mp.coordinates.length)return;
+  var rings=[],runs=[];
+  mp.coordinates.forEach(function(poly){poly.forEach(function(ring){
+   rings.push(pack(ring));var cur=[];
+   for(var i=0;i<ring.length-1;i++){var a=ring[i],b=ring[i+1];
+    if(edge(a)&&edge(b)&&same(a,b)){if(cur.length>1)runs.push(pack(cur));cur=[];continue;}
+    if(!cur.length)cur.push(a);cur.push(b);}
+   if(cur.length>1)runs.push(pack(cur));});});
+  bands.push({color:bandColor(lv),rings:rings});
+  if(lv===0&&rec.L==='F'&&coastWays.length)return;
+  lines.push({color:lv===0?'#fff':(lv%50===0?'#ffe08a':'#fff3c4'),w:lv===0?1.6:(lv%50===0?1.6:0.9),runs:runs});
+ });
+ rec.geom={bands:bands,lines:lines};
+}
+function ungzip(buf){
+ var s=new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+ return new Response(s).arrayBuffer();}
+function ensure(L,ti,tj){
+ var key=L+ti+'_'+tj;if(store[key])return;
+ var rec=store[key]={L:L,ti:ti,tj:tj,g:geo(L,ti,tj),st:0};
+ fetch('data/'+L+'/'+ti+'_'+tj+'.bin.gz').then(function(r){if(!r.ok)throw 0;return r.arrayBuffer();})
+ .then(function(b){bytes+=b.byteLength;return ungzip(b);})
+ .then(function(b){
+  var raw=new Int16Array(b);if(raw.length!==N*N)throw 0;
+  var d=new Float32Array(raw.length);
+  for(var i=0;i<raw.length;i++)d[i]=raw[i]===-32768?-100:-raw[i]/T.scale;
+  rec.depth=d;rec.fill=(L==='F')?dilate(d,N,N,5):null;rec.st=1;report();render();
+ }).catch(function(){rec.st=-1;report();});
+}
+function ensureCoast(ti,tj){
+ var key=ti+'_'+tj;if(coastLoaded[key])return;coastLoaded[key]=1;
+ fetch('data/coast/'+key+'.json').then(function(r){if(!r.ok)throw 0;bytes+=+r.headers.get('content-length')||0;return r.json();})
+ .then(function(c){
+  (c.ways||[]).forEach(function(a){
+   var n=a.length/2,ll=new Float64Array(a.length),m=new Float64Array(a.length),line=[];
+   for(var i=0;i<n;i++){ll[2*i]=a[2*i];ll[2*i+1]=a[2*i+1];m[2*i]=mercX(a[2*i+1]);m[2*i+1]=mercY(a[2*i]);line.push([a[2*i],a[2*i+1]]);}
+   L.polyline(line,{renderer:lineR,color:'#fff',weight:2,interactive:false}).addTo(osmG);
+   coastWays.push({ll:ll,m:m});});
+  (c.points||[]).forEach(function(p){
+   var nm=(KIND[p.kind]||'Segnalazione')+(p.name?' – '+p.name:'');
+   L.circleMarker([p.lat,p.lon],{renderer:lineR,radius:5,color:'#fff',weight:1.5,fillColor:'#e8403a',fillOpacity:1})
+    .bindTooltip(nm+'<br>fonte: OpenStreetMap',{className:'d'}).addTo(osmG);});
+  render();}).catch(function(){});
+}
+function report(){
+ var c={C:0,M:0,F:0};for(var k in store)if(store[k].st===1)c[store[k].L]++;
+ say('Tasselli caricati – base: '+c.C+', medio: '+c.M+', fine: '+c.F+'\nScaricati finora: '+(bytes/1048576).toFixed(1)+' MB\nZoom attuale: '+map.getZoom()+
+ (map.getZoom()<8?' (solo base)':map.getZoom()<10?' (base + medio)':' (base + medio + fine)')+'\nTocca la mappa per la profondità.');}
+function update(){
+ if(!T)return;var b=map.getBounds().pad(0.1),z=map.getZoom();
+ ['C','M','F'].forEach(function(L){
+  if(z<LV[L].z)return;var st=240*LV[L].s/960;
+  for(var ti=Math.floor((b.getSouth()-T.lat0)/st);ti<=Math.floor((b.getNorth()-T.lat0)/st);ti++)
+   for(var tj=Math.floor((b.getWest()-T.lon0)/st);tj<=Math.floor((b.getEast()-T.lon0)/st);tj++)
+    if(avail[L][ti+'_'+tj])ensure(L,ti,tj);});
+ if(z>=10){var st=240*4/960;
+  for(var ti=Math.floor((b.getSouth()-T.lat0)/st);ti<=Math.floor((b.getNorth()-T.lat0)/st);ti++)
+   for(var tj=Math.floor((b.getWest()-T.lon0)/st);tj<=Math.floor((b.getEast()-T.lon0)/st);tj++)
+    if(coastAvail[ti+'_'+tj])ensureCoast(ti,tj);}
+ report();render();
+}
+
+// --- disegno ---
+var cB=document.createElement('canvas'),cL=document.createElement('canvas');
+[cB,cL].forEach(function(c){c.style.cssText='position:absolute;left:0;top:0;pointer-events:none';});
+map.getPane('bands').appendChild(cB);map.getPane('isolines').appendChild(cL);
+function render(){
+ var size=map.getSize(),px=Math.round(size.x*0.25),py=Math.round(size.y*0.25),W=size.x+2*px,H=size.y+2*py,dpr=window.devicePixelRatio||1;
+ var pb=map.getPixelBounds(),ox=Math.round(pb.min.x)-px,oy=Math.round(pb.min.y)-py,zp=256*Math.pow(2,map.getZoom());
+ var pos=L.point(ox,oy).subtract(map.getPixelOrigin());
+ var cx=[cB,cL].map(function(c){c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';
+  L.DomUtil.setPosition(c,pos);var x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);return x;});
+ var showB=document.getElementById('bands').checked,showL=document.getElementById('lines').checked;
+ var tiles=[];for(var k in store){var r=store[k];if(r.st!==1)continue;if(!r.geom)buildGeom(r);
+  r.px=[mercX(r.g.lon0)*zp-ox,mercY(r.g.lat0)*zp-oy,mercX(r.g.lon0+240*r.g.d)*zp-ox,mercY(r.g.lat0-240*r.g.d)*zp-oy];
+  if(r.px[2]<0||r.px[0]>W||r.px[3]<0||r.px[1]>H)continue;tiles.push(r);}
+ tiles.sort(function(a,b){return LV[a.L].o-LV[b.L].o;});
+ function clip(x,r){var p=r.px;x.save();x.beginPath();x.rect(p[0],p[1],p[2]-p[0],p[3]-p[1]);x.clip();
+  var holes=tiles.filter(function(t){return LV[t.L].o>LV[r.L].o&&t.px[2]>p[0]&&t.px[0]<p[2]&&t.px[3]>p[1]&&t.px[1]<p[3];});
+  if(holes.length){x.beginPath();x.rect(-5,-5,W+10,H+10);holes.forEach(function(t){x.rect(t.px[0],t.px[1],t.px[2]-t.px[0],t.px[3]-t.px[1]);});x.clip('evenodd');}}
+ function out(b){return b[2]*zp-ox<0||b[0]*zp-ox>W||b[3]*zp-oy<0||b[1]*zp-oy>H;}
+ tiles.forEach(function(r){
+  if(showB){var x=cx[0];clip(x,r);r.geom.bands.forEach(function(bd){x.fillStyle=bd.color;x.beginPath();
+   bd.rings.forEach(function(g){if(out(g.b))return;var p=g.p;x.moveTo(p[0]*zp-ox,p[1]*zp-oy);
+    for(var i=2;i<p.length;i+=2)x.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);x.closePath();});x.fill('evenodd');});x.restore();}
+  if(showL){var y=cx[1];clip(y,r);y.lineJoin='round';r.geom.lines.forEach(function(ln){y.strokeStyle=ln.color;y.lineWidth=ln.w;y.beginPath();
+   ln.runs.forEach(function(g){if(out(g.b))return;var p=g.p;y.moveTo(p[0]*zp-ox,p[1]*zp-oy);
+    for(var i=2;i<p.length;i+=2)y.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);});y.stroke();});y.restore();}});
+ if(coastWays.length){var sp=landSpans(coastWays,W,H,ox,oy,zp);
+  cx.forEach(function(x){x.globalCompositeOperation='destination-out';x.fillStyle='#000';
+   for(var i=0;i<sp.length;i+=3){var a=Math.max(0,sp[i+1]),b=Math.min(W,sp[i+2]);if(b>a)x.fillRect(a,sp[i],b-a,1);}
+   x.globalCompositeOperation='source-over';});}
+}
+map.on('zoomstart',function(){cB.style.display=cL.style.display='none';});
+map.on('moveend zoomend resize',function(){cB.style.display=cL.style.display='block';update();});
+
+// --- interazioni ---
+map.on('click',function(e){
+ if(!T)return;var la=e.latlng.lat,lo=e.latlng.lng,txt='Nessun dato qui';
+ var land=coastWays.length?isLandAt(la,lo):null;
+ ['F','M','C'].some(function(L){
+  var s=LV[L].s,st=240*s/960,ti=Math.floor((la-T.lat0)/st),tj=Math.floor((lo-T.lon0)/st),r=store[L+ti+'_'+tj];
+  if(!r||r.st!==1)return false;var g=r.g,i=Math.round((lo-g.lon0)/g.d),j=Math.round((g.lat0-la)/g.d);
+  if(i<0||j<0||i>=N||j>=N)return false;var d=r.depth[j*N+i];
+  txt=land===true?'Terraferma':(d>0?'Profondità stimata: <b>'+d.toFixed(1)+' m</b><br>cella ~'+Math.round(s*104)+' m, riferita a LAT':'Terraferma o dato assente');
+  return true;});
+ L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);});
+document.getElementById('redraw').onclick=function(){for(var k in store)store[k].geom=null;render();};
+document.getElementById('bands').onchange=document.getElementById('lines').onchange=render;
+document.getElementById('op').oninput=function(e){map.getPane('bands').style.opacity=e.target.value/100;};
+
+fetch('data/tiles.json',{cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(t){
+ T=t;['C','M','F'].forEach(function(L){avail[L]={};(t.levels[L]||[]).forEach(function(k){avail[L][k]=1;});});
+ (t.coast||[]).forEach(function(k){coastAvail[k]=1;});update();
+}).catch(function(){say('Dati dei tasselli non ancora preparati. Avvia il procedimento con "Prepara tasselli" (vedi istruzioni).');});
+})();
+</script>
+</body>
+</html>
