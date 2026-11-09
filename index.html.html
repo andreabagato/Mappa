@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Isobate – Golfo di Napoli e isole</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --ink:#0e2230; --muted:#51697a; --paper:#f3f7f8; --line:#cfdde3;
+    --sea:#0b5d73; --sea-dark:#08414f; --warn-bg:#fff4d6; --warn-ink:#6b4b00;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{font-family:"Avenir Next","Segoe UI",Helvetica,Arial,sans-serif;color:var(--ink);background:var(--paper);display:flex;flex-direction:column}
+  header{padding:10px 16px;background:var(--sea-dark);color:#fff;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  header h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.2px}
+  header span{font-size:13px;opacity:.8}
+  main{flex:1;display:flex;min-height:0}
+  aside{width:340px;max-width:100%;overflow-y:auto;padding:16px;border-right:1px solid var(--line);background:#fff;font-size:14px;line-height:1.45}
+  #map{flex:1;min-width:0}
+  h2{font-size:14px;margin:18px 0 6px;font-weight:700}
+  h2:first-child{margin-top:0}
+  p{margin:0 0 8px}
+  .muted{color:var(--muted);font-size:13px}
+  select,input[type=text]{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff}
+  input[type=file]{width:100%;padding:8px;border:1px dashed var(--sea);border-radius:6px;background:#f0f8fa}
+  button{margin-top:8px;padding:8px 14px;border:0;border-radius:6px;background:var(--sea);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+  button:hover{background:var(--sea-dark)}
+  button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #f2a900;outline-offset:2px}
+  label.chk{display:flex;gap:8px;align-items:center;margin:6px 0}
+  #status{margin-top:12px;padding:8px 10px;border-radius:6px;background:var(--paper);border:1px solid var(--line);font-size:13px;white-space:pre-line}
+  #status.err{background:#fde8e6;border-color:#e9a8a1;color:#7a1d12}
+  .warn{margin-top:16px;padding:8px 10px;border-radius:6px;background:var(--warn-bg);color:var(--warn-ink);font-size:12.5px}
+  ol{padding-left:18px;margin:0 0 8px}
+  ol li{margin-bottom:6px}
+  .leaflet-tooltip.depth{font-weight:700;background:#08414f;color:#fff;border:0;box-shadow:none}
+  .leaflet-tooltip.depth:before{display:none}
+  @media (max-width:760px){
+    main{flex-direction:column-reverse}
+    aside{width:100%;height:46%;border-right:0;border-top:1px solid var(--line)}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Isobate – Golfo di Napoli e isole</h1>
+  <span>Dati EMODnet Bathymetry</span>
+</header>
+<main>
+  <aside>
+    <h2>1. Zona</h2>
+    <select id="region"></select>
+    <p class="muted" id="regionNote" style="margin-top:6px"></p>
+
+    <h2>2. Scarica e carica i dati</h2>
+    <ol>
+      <li><a id="dl" href="#" target="_blank" rel="noopener">Scarica il file della zona</a> (parte da solo).</li>
+      <li>Scegli qui sotto il file scaricato.</li>
+    </ol>
+    <input type="file" id="file" accept=".csv,.asc,.txt">
+
+    <h2>3. Profondità da disegnare (metri)</h2>
+    <input type="text" id="levels" value="5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500">
+    <label class="chk"><input type="checkbox" id="bands" checked> Colora per profondità</label>
+    <label class="chk"><input type="checkbox" id="lines" checked> Mostra le isobate</label>
+    <label for="op" style="display:block;margin-top:8px">Trasparenza dei colori del mare</label>
+    <input type="range" id="op" min="0" max="100" value="50" style="width:100%">
+    <p class="muted">A sinistra vedi meglio il fondale nel satellite, a destra i colori della profondità.</p>
+    <button id="redraw">Ridisegna</button>
+
+    <h2>4. Costa e scogli (OpenStreetMap)</h2>
+    <p class="muted">Aggiunge la linea di costa reale e gli scogli, secche e relitti segnalati dai volontari di OpenStreetMap. Con la costa caricata, i colori e le isobate vengono estesi fino a riva e tagliati lungo la costa, senza spazi vuoti. Dati utili ma incompleti.</p>
+    <button id="osm">Aggiungi costa e scogli</button>
+    <button id="osmOff" style="background:#6b7f8c">Rimuovi</button>
+
+    <h2>5. Come leggere la mappa</h2>
+    <p>Tocca un punto sul mare per la profondità stimata. Passa il cursore (o tocca) su una linea per vederne la quota. In alto a destra cambi tra satellite e mappa.</p>
+
+    <div id="status">Nessun file caricato.</div>
+
+    <div class="warn"><strong>Solo prova di valutazione.</strong> Dati mediati su celle di ~100 m, riferiti al livello minimo di marea (LAT). Non usare per la navigazione né per la sicurezza in mare.</div>
+  </aside>
+  <div id="map"></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+  // ---------------------------------------------------------------
+  // ZONE DISPONIBILI. Per aggiungerne una basta una riga in più.
+  // stride: 1 = massimo dettaglio, 3 = una cella ogni 3 (meno pesante)
+  // ---------------------------------------------------------------
+  var REGIONS=[
+    {id:'napoli', name:'Golfo di Napoli, Procida, Ischia e Capri', latMin:40.50,lonMin:13.82,latMax:40.90,lonMax:14.52,stride:1,
+     note:'Da Ischia a Punta Campanella, con Procida e Capri. Dettaglio massimo (celle di ~100 m).'}
+  ];
+
+  var sel=document.getElementById('region'), noteEl=document.getElementById('regionNote'), dlEl=document.getElementById('dl');
+  REGIONS.forEach(function(r,i){var o=document.createElement('option');o.value=i;o.textContent=r.name;sel.appendChild(o);});
+
+  function csvUrl(r){
+    return 'https://erddap.emodnet.eu/erddap/griddap/bathymetry_dtm_2024.csv?elevation[('+r.latMin+'):'+r.stride+':('+r.latMax+')][('+r.lonMin+'):'+r.stride+':('+r.lonMax+')]';
+  }
+
+  // ---------- Mappa ----------
+  var map=L.map('map').setView([40.55,14.5],8);
+  var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Immagini © Esri'});
+  var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  sat.addTo(map);
+  L.control.layers({'Satellite':sat,'Mappa':osm},null,{position:'topright'}).addTo(map);
+  map.createPane('bands'); map.getPane('bands').style.zIndex=350; map.getPane('bands').style.opacity=0.5;
+  map.createPane('isolines'); map.getPane('isolines').style.zIndex=450;
+  var lineRenderer=L.canvas({pane:'isolines',tolerance:6});
+  var frame=null, grid=null, coastWays=[], osmCoast=false;
+
+  var statusEl=document.getElementById('status');
+  function say(msg,err){statusEl.textContent=msg;statusEl.className=err?'err':'';}
+
+  function chooseRegion(){
+    var r=REGIONS[sel.value];
+    dlEl.href=csvUrl(r);
+    noteEl.textContent=r.note;
+    if(frame) map.removeLayer(frame);
+    frame=L.rectangle([[r.latMin,r.lonMin],[r.latMax,r.lonMax]],{color:'#ffd166',weight:2,dashArray:'6 6',fill:false,interactive:false}).addTo(map);
+    map.fitBounds(frame.getBounds());
+    grid=null; overlay.clear();
+    document.getElementById('file').value='';
+    say('Zona scelta. Scarica il file e caricalo qui.');
+  }
+  sel.addEventListener('change',chooseRegion);
+
+  // ---------- Lettura file (leggera in memoria) ----------
+  function parseCSV(text){
+    var len=text.length, pos=0;
+    function next(){ if(pos>=len) return null; var e=text.indexOf('\n',pos); if(e<0) e=len; var s=text.substring(pos,e); pos=e+1; return s; }
+    var head=next().split(',').map(function(s){return s.trim().replace(/"/g,'').toLowerCase();});
+    var iLat=head.findIndex(function(h){return h.indexOf('lat')===0;});
+    var iLon=head.findIndex(function(h){return h.indexOf('lon')===0;});
+    var iZ=head.findIndex(function(h,i){return i!==iLat&&i!==iLon;});
+    if(iLat<0||iLon<0||iZ<0) throw new Error('Il CSV non ha le colonne latitude, longitude, elevation.');
+    // conteggio righe per riservare la memoria una volta sola
+    var total=0, p=0; while((p=text.indexOf('\n',p)+1)>0) total++;
+    var vals=new Float32Array(total), n=0;
+    var firstLat=NaN, secondLat=NaN, lastLat=NaN, firstLon=NaN, lonEndFirstRow=NaN, nx=0, rowDone=false, prevLat=NaN, line;
+    while((line=next())!==null){
+      var f=line.split(',');
+      var la=parseFloat(f[iLat]), lo=parseFloat(f[iLon]);
+      if(isNaN(la)||isNaN(lo)) continue;
+      var z=parseFloat(f[iZ]);
+      if(n===0){ firstLat=la; firstLon=lo; }
+      if(!rowDone){
+        if(n>0 && la!==firstLat){ rowDone=true; nx=n; secondLat=la; }
+        else lonEndFirstRow=lo;
+      }
+      vals[n++]=isNaN(z)?-100:-z;
+      lastLat=la; prevLat=la;
+    }
+    if(!n) throw new Error('Nessun dato numerico trovato nel file.');
+    if(!rowDone) throw new Error('Il file contiene una sola riga di dati.');
+    var ny=Math.round(n/nx);
+    if(ny*nx!==n) throw new Error('La griglia non è regolare (righe incomplete). Riscarica il file.');
+    var ascending=secondLat>firstLat;
+    var depth;
+    if(ascending){ // porto il nord in cima
+      depth=new Float32Array(n);
+      for(var r=0;r<ny;r++) depth.set(vals.subarray(r*nx,(r+1)*nx),(ny-1-r)*nx);
+    } else depth=vals.subarray(0,n);
+    return {nx:nx,ny:ny,lon0:firstLon,lat0:Math.max(firstLat,lastLat),
+            dlon:(lonEndFirstRow-firstLon)/(nx-1),dlat:Math.abs(lastLat-firstLat)/(ny-1),depth:depth};
+  }
+
+  function parseASC(text){
+    var lines=text.split(/\r?\n/), h={}, pos=0;
+    while(pos<lines.length){
+      var m=lines[pos].trim().split(/\s+/);
+      if(m.length===2&&isNaN(parseFloat(m[0]))){h[m[0].toLowerCase()]=parseFloat(m[1]);pos++;} else break;
+    }
+    var nx=h.ncols, ny=h.nrows, cs=h.cellsize, nd=h.nodata_value;
+    var xc=('xllcenter' in h)?h.xllcenter:h.xllcorner+cs/2;
+    var yc=('yllcenter' in h)?h.yllcenter:h.yllcorner+cs/2;
+    if(!nx||!ny||!cs) throw new Error('Intestazione ASCII non riconosciuta.');
+    var depth=new Float32Array(nx*ny), n=0;
+    for(;pos<lines.length&&n<nx*ny;pos++){
+      var t=lines[pos].trim(); if(!t) continue;
+      var v=t.split(/\s+/);
+      for(var i=0;i<v.length&&n<nx*ny;i++){
+        var z=parseFloat(v[i]);
+        depth[n++]=(isNaN(z)||z===nd)?-100:-z;
+      }
+    }
+    return {nx:nx,ny:ny,lon0:xc,lat0:yc+(ny-1)*cs,dlon:cs,dlat:cs,depth:depth};
+  }
+
+  // ---------- Disegno ----------
+  function parseLevels(){
+    var v=document.getElementById('levels').value.split(/[;,\s]+/).map(parseFloat)
+      .filter(function(x){return !isNaN(x)&&x>0;});
+    return Array.from(new Set(v)).sort(function(a,b){return a-b;});
+  }
+  function bandColor(d){
+    var t=Math.min(1,Math.sqrt(d/250));
+    return d3.interpolateRgb('#c9f0f2','#082a5c')(t);
+  }
+
+  // BEGIN-PURE
+  function mercX(lon){return (lon+180)/360;}
+  function mercY(lat){var s=Math.sin(lat*Math.PI/180);return 0.5-Math.log((1+s)/(1-s))/(4*Math.PI);}
+
+  // Estende i valori di profondità del mare di K celle verso terra (valore della cella di mare più vicina)
+  function dilateSea(src,nx,ny,K){
+    var out=new Float32Array(src), dist=new Int16Array(nx*ny).fill(-1), q=new Int32Array(nx*ny), h=0, t=0, i;
+    for(i=0;i<src.length;i++) if(src[i]>0){dist[i]=0;q[t++]=i;}
+    while(h<t){
+      var c=q[h++], d=dist[c]; if(d>=K) continue;
+      var cx=c%nx, cy=(c-cx)/nx;
+      for(var dy=-1;dy<=1;dy++) for(var dx=-1;dx<=1;dx++){
+        if(!dx&&!dy) continue;
+        var x=cx+dx, y=cy+dy; if(x<0||y<0||x>=nx||y>=ny) continue;
+        var n=y*nx+x; if(dist[n]!==-1) continue;
+        dist[n]=d+1; out[n]=out[c]; q[t++]=n;
+      }
+    }
+    return out;
+  }
+
+  // Terra = a sinistra della linea di costa OSM (il mare è a destra). Per ogni riga di pixel
+  // si ordinano gli attraversamenti: il primo dice da che lato si parte, poi si alterna.
+  function landSpans(ways,W,H,ox,oy,zp){
+    var rows=new Array(H), spans=[];
+    ways.forEach(function(w){
+      var p=w.m;
+      for(var i=0;i<p.length-2;i+=2){
+        var x1=p[i]*zp-ox, y1=p[i+1]*zp-oy, x2=p[i+2]*zp-ox, y2=p[i+3]*zp-oy;
+        if(y1===y2) continue;
+        var ymin=Math.min(y1,y2), ymax=Math.max(y1,y2);
+        if(ymax<0||ymin>=H) continue;
+        var r0=Math.max(0,Math.ceil(ymin-0.5)), r1=Math.min(H-1,Math.ceil(ymax-0.5)-1), north=y2<y1;
+        for(var r=r0;r<=r1;r++){
+          var yc=r+0.5, x=x1+(yc-y1)*(x2-x1)/(y2-y1);
+          (rows[r]||(rows[r]=[])).push([x,north?1:0]);
+        }
+      }
+    });
+    for(var r=0;r<H;r++){
+      var cr=rows[r]; if(!cr||!cr.length) continue;
+      cr.sort(function(a,b){return a[0]-b[0];});
+      var landStart=(cr[0][1]===1)?-Infinity:null;
+      for(var k=0;k<cr.length;k++){
+        if(cr[k][1]===1){ if(landStart!==null){ spans.push(r,landStart,cr[k][0]); landStart=null; } }
+        else if(landStart===null){ landStart=cr[k][0]; }
+      }
+      if(landStart!==null) spans.push(r,landStart,Infinity);
+    }
+    return spans;
+  }
+
+  // true = terra, false = mare, null = non determinabile
+  function isLandAt(ways,lat,lon){
+    var best=Infinity, north=null;
+    ways.forEach(function(w){
+      var p=w.ll;
+      for(var i=0;i<p.length-2;i+=2){
+        var la1=p[i],lo1=p[i+1],la2=p[i+2],lo2=p[i+3];
+        if((la1<=lat&&la2>lat)||(la2<=lat&&la1>lat)){
+          var x=lo1+(lat-la1)*(lo2-lo1)/(la2-la1);
+          if(x>lon&&x<best){best=x;north=la2>la1;}
+        }
+      }
+    });
+    return north===null?null:north;
+  }
+  // END-PURE
+
+  // ---------- Livello grafico (due canvas: colori e linee) ----------
+  var overlay={
+    bands:[], lines:[], cB:null, cL:null,
+    init:function(){
+      function mk(pane){
+        var c=document.createElement('canvas');
+        c.style.position='absolute'; c.style.left='0'; c.style.top='0'; c.style.pointerEvents='none';
+        map.getPane(pane).appendChild(c); return c;
+      }
+      this.cB=mk('bands'); this.cL=mk('isolines');
+      var self=this;
+      map.on('moveend zoomend resize',function(){self.render();});
+      map.on('zoomstart',function(){self.cB.style.display='none';self.cL.style.display='none';});
+    },
+    clear:function(){this.bands=[];this.lines=[];this.render();},
+    render:function(){
+      if(!this.cB) return;
+      var size=map.getSize(), padx=Math.round(size.x*0.25), pady=Math.round(size.y*0.25);
+      var W=size.x+2*padx, H=size.y+2*pady, dpr=window.devicePixelRatio||1;
+      var pb=map.getPixelBounds(), ox=Math.round(pb.min.x)-padx, oy=Math.round(pb.min.y)-pady;
+      var pos=L.point(ox,oy).subtract(map.getPixelOrigin()), zp=256*Math.pow(2,map.getZoom());
+      var ctxs=[this.cB,this.cL].map(function(c){
+        c.width=W*dpr; c.height=H*dpr; c.style.width=W+'px'; c.style.height=H+'px'; c.style.display='block';
+        L.DomUtil.setPosition(c,pos);
+        var x=c.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,W,H); return x;
+      });
+      function outside(b){return b[2]*zp-ox<0||b[0]*zp-ox>W||b[3]*zp-oy<0||b[1]*zp-oy>H;}
+      var xb=ctxs[0];
+      this.bands.forEach(function(b){
+        xb.fillStyle=b.color; xb.beginPath();
+        b.rings.forEach(function(r){
+          if(outside(r.b)) return;
+          var p=r.p; xb.moveTo(p[0]*zp-ox,p[1]*zp-oy);
+          for(var i=2;i<p.length;i+=2) xb.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);
+          xb.closePath();
+        });
+        xb.fill('evenodd');
+      });
+      var xl=ctxs[1]; xl.lineJoin='round'; xl.lineCap='round';
+      this.lines.forEach(function(g){
+        xl.strokeStyle=g.color; xl.lineWidth=g.weight; xl.beginPath();
+        g.runs.forEach(function(r){
+          if(outside(r.b)) return;
+          var p=r.p; xl.moveTo(p[0]*zp-ox,p[1]*zp-oy);
+          for(var i=2;i<p.length;i+=2) xl.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);
+        });
+        xl.stroke();
+      });
+      if(coastWays.length){
+        var spans=landSpans(coastWays,W,H,ox,oy,zp);
+        ctxs.forEach(function(x){
+          x.globalCompositeOperation='destination-out'; x.fillStyle='#000';
+          for(var i=0;i<spans.length;i+=3){
+            var x0=Math.max(0,spans[i+1]), x1=Math.min(W,spans[i+2]);
+            if(x1>x0) x.fillRect(x0,spans[i],x1-x0,1);
+          }
+          x.globalCompositeOperation='source-over';
+        });
+      }
+    }
+  };
+  overlay.init();
+
+  function activeDepth(){return (osmCoast&&grid.depthFill)?grid.depthFill:grid.depth0;}
+
+  function draw(){
+    overlay.bands=[]; overlay.lines=[];
+    if(!grid){ overlay.render(); return; }
+    var nx=grid.nx, ny=grid.ny, eps=1e-6, depth=activeDepth();
+    var levels=parseLevels();
+    var gen=d3.contours().size([nx,ny]).smooth(true);
+    function mx(p){return mercX(grid.lon0+(p[0]-0.5)*grid.dlon);}
+    function my(p){return mercY(grid.lat0-(p[1]-0.5)*grid.dlat);}
+    function pack(points){
+      var a=new Float64Array(points.length*2), b=[Infinity,Infinity,-Infinity,-Infinity];
+      for(var i=0;i<points.length;i++){
+        var x=mx(points[i]), y=my(points[i]);
+        a[2*i]=x; a[2*i+1]=y;
+        if(x<b[0])b[0]=x; if(y<b[1])b[1]=y; if(x>b[2])b[2]=x; if(y>b[3])b[3]=y;
+      }
+      return {p:a,b:b};
+    }
+    function onEdge(p){return p[0]<=eps||p[0]>=nx-eps||p[1]<=eps||p[1]>=ny-eps;}
+    function sameEdge(a,b){
+      return (a[0]<=eps&&b[0]<=eps)||(a[0]>=nx-eps&&b[0]>=nx-eps)||(a[1]<=eps&&b[1]<=eps)||(a[1]>=ny-eps&&b[1]>=ny-eps);
+    }
+    var showBands=document.getElementById('bands').checked;
+    var showLines=document.getElementById('lines').checked;
+    var count=0;
+
+    if(showBands){
+      [0].concat(levels).forEach(function(lv){
+        var mp=gen.contour(depth,lv);
+        if(!mp.coordinates.length) return;
+        var rings=[];
+        mp.coordinates.forEach(function(poly){poly.forEach(function(r){rings.push(pack(r));});});
+        overlay.bands.push({color:bandColor(lv),rings:rings});
+      });
+    }
+    if(showLines){
+      [0].concat(levels).forEach(function(lv){
+        if(lv===0&&osmCoast) return;
+        var mp=gen.contour(depth,lv), runs=[];
+        mp.coordinates.forEach(function(poly){
+          poly.forEach(function(ring){
+            var cur=[];
+            for(var i=0;i<ring.length-1;i++){
+              var a=ring[i], b=ring[i+1];
+              if(onEdge(a)&&onEdge(b)&&sameEdge(a,b)){ if(cur.length>1) runs.push(pack(cur)); cur=[]; continue; }
+              if(!cur.length) cur.push(a);
+              cur.push(b);
+            }
+            if(cur.length>1) runs.push(pack(cur));
+          });
+        });
+        if(!runs.length) return;
+        count++;
+        var isCoast=lv===0, major=(lv%50===0);
+        overlay.lines.push({color:isCoast?'#ffffff':(major?'#ffe08a':'#fff3c4'),weight:isCoast?1.8:(major?1.7:0.9),runs:runs});
+      });
+    }
+    overlay.render();
+    say('File caricato: '+nx+' × '+ny+' celle (≈'+(grid.dlat*111320).toFixed(0)+' m × '+(grid.dlon*111320*Math.cos(grid.lat0*Math.PI/180)).toFixed(0)+' m ciascuna).\n'+
+        (grid.info?grid.info+'\n':'')+
+        (osmCoast?'Colori e isobate estesi fino alla costa reale (OpenStreetMap).\n':'')+
+        (showLines?('Isobate disegnate: '+count+(count<=1?' (poche o nessuna: controlla che la zona scelta contenga mare e che i livelli abbiano senso).':'.')):'Isobate nascoste.')+'\nTocca la mappa per leggere la profondità.');
+  }
+
+  // ---------- Interazioni ----------
+  map.on('click',function(e){
+    if(!grid) return;
+    var i=Math.round((e.latlng.lng-grid.lon0)/grid.dlon);
+    var j=Math.round((grid.lat0-e.latlng.lat)/grid.dlat);
+    if(i<0||j<0||i>=grid.nx||j>=grid.ny) return;
+    var k=j*grid.nx+i, d0=grid.depth0[k], txt;
+    var land=(osmCoast&&coastWays.length)?isLandAt(coastWays,e.latlng.lat,e.latlng.lng):null;
+    if(land===true){
+      txt='Terraferma<br><span class="muted">secondo la costa di OpenStreetMap</span>';
+    } else {
+      var d=(land===false)?activeDepth()[k]:d0;
+      if(d>0){
+        txt='Profondità stimata: <b>'+d.toFixed(1)+' m</b><br><span class="muted">cella ~100 m, riferita a LAT'+((land===false&&d0<=0)?'. Valore esteso dalla cella di mare più vicina, quindi approssimato':'')+'</span>';
+      } else if(land===false){
+        txt='Mare vicino alla costa<br><span class="muted">profondità non disponibile in questo punto</span>';
+      } else {
+        txt='Terraferma o dato assente<br><span class="muted">quota '+(-d).toFixed(1)+' m</span>';
+      }
+    }
+    L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);
+  });
+
+  document.getElementById('file').addEventListener('change',function(ev){
+    var f=ev.target.files[0]; if(!f) return;
+    say('Lettura di '+f.name+' in corso… (può richiedere qualche secondo)');
+    var r=new FileReader();
+    r.onload=function(){
+      setTimeout(function(){
+        try{
+          var txt=String(r.result);
+          var mb=(f.size/1048576).toFixed(1)+' MB';
+          var head=txt.slice(0,200);
+          if(/^\s*</.test(head)||/error/i.test(head)){
+            throw new Error('il file ('+mb+') non contiene dati ma un messaggio del server:\n'+txt.slice(0,300).replace(/<[^>]+>/g,' ')+'\nRiscarica il file o prova una zona più piccola.');
+          }
+          grid=/^\s*ncols/i.test(txt)?parseASC(txt):parseCSV(txt);
+          grid.depth0=grid.depth; grid.depthFill=null; osmCoast=false; coastWays=[]; osmGroup.clearLayers();
+          var dmin=Infinity,dmax=-Infinity;
+          for(var q=0;q<grid.depth.length;q++){var v=grid.depth[q]; if(v>-100){ if(v<dmin)dmin=v; if(v>dmax)dmax=v; }}
+          grid.info='File '+mb+'. Profondità massima nel file: '+dmax.toFixed(0)+' m, quota massima sulla terra: '+(-dmin).toFixed(0)+' m.';
+          var south=grid.lat0-(grid.ny-1)*grid.dlat, east=grid.lon0+(grid.nx-1)*grid.dlon;
+          map.fitBounds([[south,grid.lon0],[grid.lat0,east]]);
+          draw();
+        }catch(err){ grid=null; overlay.clear(); say('Errore: '+err.message,true); }
+      },30);
+    };
+    r.onerror=function(){say('Impossibile leggere il file.',true);};
+    r.readAsText(f);
+  });
+  // ---------- Costa e scogli da OpenStreetMap ----------
+  var osmGroup=L.layerGroup().addTo(map), osmCoast=false;
+  function overpass(q){
+    return fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q)})
+      .then(function(r){ if(!r.ok) throw new Error('il server OpenStreetMap ha risposto '+r.status+' (riprova tra qualche minuto)'); return r.json(); });
+  }
+  var KIND={rock:'Scoglio',wreck:'Relitto',obstruction:'Ostacolo',reef:'Scogliera/secca',shoal:'Secca'};
+  var LEVEL={'always dry':'sempre emerso','awash':'a pelo d\'acqua','covers':'sommerso con l\'alta marea','submerged':'sommerso'};
+  document.getElementById('osm').addEventListener('click',function(){
+    if(!grid){ say('Carica prima il file dei dati.',true); return; }
+    var south=grid.lat0-(grid.ny-1)*grid.dlat, east=grid.lon0+(grid.nx-1)*grid.dlon;
+    var bb=south+','+grid.lon0+','+grid.lat0+','+east, nCoast=0, nPts=0;
+    say('Scarico costa e scogli da OpenStreetMap… (può richiedere mezzo minuto)');
+    overpass('[out:json][timeout:60];way["natural"="coastline"]('+bb+');out geom;')
+    .then(function(d){
+      osmGroup.clearLayers();
+      d.elements.forEach(function(w){
+        if(!w.geometry) return;
+        nCoast++;
+        L.polyline(w.geometry.map(function(p){return [p.lat,p.lon];}),{renderer:lineRenderer,color:'#ffffff',weight:2,opacity:0.95,interactive:false}).addTo(osmGroup);
+      });
+      coastWays=d.elements.filter(function(w){return w.geometry&&w.geometry.length>1;}).map(function(w){
+        var ll=new Float64Array(w.geometry.length*2), m=new Float64Array(w.geometry.length*2);
+        w.geometry.forEach(function(p,i){ ll[2*i]=p.lat; ll[2*i+1]=p.lon; m[2*i]=mercX(p.lon); m[2*i+1]=mercY(p.lat); });
+        return {ll:ll,m:m};
+      });
+      osmCoast=coastWays.length>0;
+      if(osmCoast) grid.depthFill=dilateSea(grid.depth0,grid.nx,grid.ny,5);
+      draw();
+      return overpass('[out:json][timeout:60];(node["seamark:type"~"^(rock|wreck|obstruction)$"]('+bb+');node["natural"~"^(reef|shoal)$"]('+bb+');way["natural"~"^(reef|shoal)$"]('+bb+'););out center tags;');
+    })
+    .then(function(d){
+      d.elements.forEach(function(el){
+        var lat=el.lat!==undefined?el.lat:(el.center&&el.center.lat), lon=el.lon!==undefined?el.lon:(el.center&&el.center.lon);
+        if(lat===undefined) return;
+        var t=el.tags||{}, kind=t['seamark:type']||t.natural, name=KIND[kind]||'Segnalazione';
+        if(t.name) name+=' – '+t.name;
+        var lv=LEVEL[t['seamark:rock:water_level']||t['seamark:wreck:water_level']||''];
+        if(lv) name+=' ('+lv+')';
+        nPts++;
+        L.circleMarker([lat,lon],{renderer:lineRenderer,radius:5,color:'#ffffff',weight:1.5,fillColor:'#e8403a',fillOpacity:1})
+          .bindTooltip(name+'<br><span style="font-weight:400">fonte: OpenStreetMap</span>',{className:'depth'}).addTo(osmGroup);
+      });
+      say('Da OpenStreetMap: '+nCoast+' tratti di costa e '+nPts+' segnalazioni (scogli, secche, relitti, indicati con un punto rosso).'+
+          (nPts===0?'\nNessuna segnalazione in questa zona: non vuol dire che non ce ne siano.':'')+
+          '\nI dati sono inseriti da volontari e possono essere incompleti: non fidarti dell\'assenza di un punto.');
+    })
+    .catch(function(err){ say('Errore nel scaricare i dati da OpenStreetMap: '+err.message,true); });
+  });
+  document.getElementById('osmOff').addEventListener('click',function(){ osmGroup.clearLayers(); osmCoast=false; coastWays=[]; draw(); });
+
+  document.getElementById('redraw').addEventListener('click',draw);
+  document.getElementById('op').addEventListener('input',function(e){map.getPane('bands').style.opacity=e.target.value/100;});
+  document.getElementById('bands').addEventListener('change',draw);
+  document.getElementById('lines').addEventListener('change',draw);
+
+  chooseRegion();
+})();
+</script>
+</body>
+</html>
