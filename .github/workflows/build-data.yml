@@ -4,9 +4,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      prepara_tasselli:
+        description: "Prepara i tasselli del test Campania-Sardegna (lungo: 30-60 minuti)"
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -31,9 +36,34 @@ jobs:
           mkdir -p site/data
           cp index.html site/index.html
 
-      - name: Scarica e prepara i dati
+      - name: Scarica e prepara i dati delle zone
         continue-on-error: true
         run: python build_zone.py
+
+      - name: Prepara i tasselli (solo se richiesto)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
+        continue-on-error: true
+        run: python build_tiles.py
+
+      - name: Salva i tasselli nel repository
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
+        continue-on-error: true
+        run: |
+          if [ -f tiles-data/tiles.json ]; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add tiles-data
+            git commit -m "Aggiorna i tasselli" || echo "Nessun cambiamento"
+            git push
+          else
+            echo "Nessun tassello da salvare"
+          fi
+
+      - name: Aggiungi la pagina di test e i tasselli al sito
+        run: |
+          mkdir -p site/tiles
+          if [ -f tiles.html ]; then cp tiles.html site/tiles/index.html; fi
+          if [ -d tiles-data ]; then cp -r tiles-data site/tiles/data; fi
 
       - name: Configura Pages
         uses: actions/configure-pages@v5
