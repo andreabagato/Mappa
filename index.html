@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Isobate – Golfo di Napoli e isole</title>
+<title>Isobate – Campania</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root{
@@ -44,12 +44,12 @@
 </head>
 <body>
 <header>
-  <h1>Isobate – Golfo di Napoli e isole</h1>
-  <span>Dati EMODnet Bathymetry</span>
+  <h1>Isobate – Campania</h1>
+  <span>Dati EMODnet Bathymetry, una zona alla volta</span>
 </header>
 <main>
   <aside>
-    <h2>1. Zona</h2>
+    <h2>1. Scegli la zona</h2>
     <select id="region"></select>
     <p class="muted" id="regionNote" style="margin-top:6px"></p>
 
@@ -127,9 +127,9 @@
     map.fitBounds(frame.getBounds());
     grid=null; overlay.clear();
     document.getElementById('file').value='';
-    say('Zona scelta. Scarica il file e caricalo qui.');
+    say('Zona scelta. Cerco i dati preparati…');
   }
-  sel.addEventListener('change',chooseRegion);
+  sel.addEventListener('change',function(){ chooseRegion(); loadPrepared(REGIONS[sel.value].id); });
 
   // ---------- Lettura file (leggera in memoria) ----------
   function parseCSV(text){
@@ -531,13 +531,15 @@
     if(osmCoast) grid.depthFill=dilateSea(grid.depth0,grid.nx,grid.ny,5);
   }
 
-  function loadPrepared(){
-    var base='data/napoli/', meta=null;
+  var loadToken=0;
+  function loadPrepared(id){
+    var base='data/'+id+'/', meta=null, token=++loadToken;
     return fetch(base+'meta.json',{cache:'no-cache'})
       .then(function(r){ if(!r.ok) throw new Error('assente'); return r.json(); })
       .then(function(m){ meta=m; say('Carico i dati preparati…'); return fetch(base+'grid.i16'); })
       .then(function(r){ if(!r.ok) throw new Error('assente'); return r.arrayBuffer(); })
       .then(function(buf){
+        if(token!==loadToken) return;
         var raw=new Int16Array(buf);
         if(raw.length!==meta.nx*meta.ny) throw new Error('dimensioni non coerenti');
         var depth=new Float32Array(raw.length);
@@ -551,14 +553,31 @@
         draw();
         return fetch(base+'coast.json')
           .then(function(r){ if(!r.ok) throw new Error('costa assente'); return r.json(); })
-          .then(function(c){ applyCoastData(c.ways||[],c.points||[]); draw(); })
+          .then(function(c){ if(token!==loadToken) return; applyCoastData(c.ways||[],c.points||[]); draw(); })
           .catch(function(){ say(statusEl.textContent+'\nCosta e scogli non disponibili: puoi usare il pulsante "Aggiungi costa e scogli".'); });
       })
-      .catch(function(){ /* nessun dato preparato: resta il caricamento manuale */ });
+      .catch(function(){
+        if(token===loadToken) say('Dati preparati non disponibili per questa zona: scarica il file con il link qui sopra e caricalo a mano.',true);
+      });
   }
 
-  chooseRegion();
-  loadPrepared();
+  function fillSelect(){
+    sel.innerHTML='';
+    REGIONS.forEach(function(r,i){var o=document.createElement('option');o.value=i;o.textContent=r.name;sel.appendChild(o);});
+  }
+  fetch('data/zones.json',{cache:'no-cache'})
+    .then(function(r){ if(!r.ok) throw new Error('assente'); return r.json(); })
+    .then(function(z){
+      if(z.zones&&z.zones.length){
+        REGIONS=z.zones.map(function(q){
+          return {id:q.id,name:q.name,latMin:q.bbox[0],lonMin:q.bbox[1],latMax:q.bbox[2],lonMax:q.bbox[3],stride:1,
+                  note:'Dettaglio massimo (celle di ~100 m).'};
+        });
+        fillSelect();
+      }
+    })
+    .catch(function(){ /* elenco non disponibile: resta la zona di prova */ })
+    .then(function(){ chooseRegion(); loadPrepared(REGIONS[sel.value].id); });
 })();
 </script>
 </body>
