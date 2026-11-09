@@ -53,7 +53,7 @@
     <select id="region"></select>
     <p class="muted" id="regionNote" style="margin-top:6px"></p>
 
-    <h2>2. Scarica e carica i dati</h2>
+    <h2>2. Dati manuali (solo se non si caricano da soli)</h2>
     <ol>
       <li><a id="dl" href="#" target="_blank" rel="noopener">Scarica il file della zona</a> (parte da solo).</li>
       <li>Scegli qui sotto il file scaricato.</li>
@@ -507,7 +507,58 @@
   document.getElementById('bands').addEventListener('change',draw);
   document.getElementById('lines').addEventListener('change',draw);
 
+  // ---------- Dati preparati in anticipo (si caricano da soli) ----------
+  function applyCoastData(ways,pts){
+    osmGroup.clearLayers();
+    coastWays=ways.map(function(a){
+      var n=a.length/2, ll=new Float64Array(a.length), m=new Float64Array(a.length), line=[];
+      for(var i=0;i<n;i++){
+        ll[2*i]=a[2*i]; ll[2*i+1]=a[2*i+1];
+        m[2*i]=mercX(a[2*i+1]); m[2*i+1]=mercY(a[2*i]);
+        line.push([a[2*i],a[2*i+1]]);
+      }
+      L.polyline(line,{renderer:lineRenderer,color:'#ffffff',weight:2,opacity:0.95,interactive:false}).addTo(osmGroup);
+      return {ll:ll,m:m};
+    });
+    pts.forEach(function(p){
+      var name=KIND[p.kind]||'Segnalazione';
+      if(p.name) name+=' – '+p.name;
+      var lv=LEVEL[p.level||'']; if(lv) name+=' ('+lv+')';
+      L.circleMarker([p.lat,p.lon],{renderer:lineRenderer,radius:5,color:'#ffffff',weight:1.5,fillColor:'#e8403a',fillOpacity:1})
+        .bindTooltip(name+'<br><span style="font-weight:400">fonte: OpenStreetMap</span>',{className:'depth'}).addTo(osmGroup);
+    });
+    osmCoast=coastWays.length>0;
+    if(osmCoast) grid.depthFill=dilateSea(grid.depth0,grid.nx,grid.ny,5);
+  }
+
+  function loadPrepared(){
+    var base='data/napoli/', meta=null;
+    return fetch(base+'meta.json',{cache:'no-cache'})
+      .then(function(r){ if(!r.ok) throw new Error('assente'); return r.json(); })
+      .then(function(m){ meta=m; say('Carico i dati preparati…'); return fetch(base+'grid.i16'); })
+      .then(function(r){ if(!r.ok) throw new Error('assente'); return r.arrayBuffer(); })
+      .then(function(buf){
+        var raw=new Int16Array(buf);
+        if(raw.length!==meta.nx*meta.ny) throw new Error('dimensioni non coerenti');
+        var depth=new Float32Array(raw.length);
+        for(var i=0;i<raw.length;i++) depth[i]=(raw[i]===-32768)?-100:-raw[i]/10;
+        grid={nx:meta.nx,ny:meta.ny,lon0:meta.lon0,lat0:meta.lat0,dlon:meta.dlon,dlat:meta.dlat,depth:depth,depth0:depth,depthFill:null};
+        grid.info='Dati preparati il '+String(meta.built_utc||'?').slice(0,10)+' ('+meta.source+').';
+        osmCoast=false; coastWays=[]; osmGroup.clearLayers();
+        map.attributionControl.addAttribution('Batimetria © EMODnet · costa e scogli © OpenStreetMap');
+        var south=grid.lat0-(grid.ny-1)*grid.dlat, east=grid.lon0+(grid.nx-1)*grid.dlon;
+        map.fitBounds([[south,grid.lon0],[grid.lat0,east]]);
+        draw();
+        return fetch(base+'coast.json')
+          .then(function(r){ if(!r.ok) throw new Error('costa assente'); return r.json(); })
+          .then(function(c){ applyCoastData(c.ways||[],c.points||[]); draw(); })
+          .catch(function(){ say(statusEl.textContent+'\nCosta e scogli non disponibili: puoi usare il pulsante "Aggiungi costa e scogli".'); });
+      })
+      .catch(function(){ /* nessun dato preparato: resta il caricamento manuale */ });
+  }
+
   chooseRegion();
+  loadPrepared();
 })();
 </script>
 </body>
