@@ -1,0 +1,55 @@
+name: Costruisci dati e pubblica
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scarica i file del repository
+        uses: actions/checkout@v4
+
+      - name: Installa Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepara la cartella del sito
+        run: |
+          mkdir -p site/data
+          cp index.html site/index.html
+
+      - name: Scarica e prepara i dati
+        continue-on-error: true
+        run: python build_zone.py
+
+      - name: Configura Pages
+        uses: actions/configure-pages@v5
+
+      - name: Impacchetta il sito
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Pubblica su GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
