@@ -187,7 +187,6 @@ function render(){
  tiles.sort(function(a,b){return LV[a.L].o-LV[b.L].o;});
  function clip(x,r){var p=r.px;x.save();x.beginPath();x.rect(p[0],p[1],p[2]-p[0],p[3]-p[1]);x.clip();
   var holes=tiles.filter(function(t){return LV[t.L].o>LV[r.L].o&&t.px[2]>p[0]&&t.px[0]<p[2]&&t.px[3]>p[1]&&t.px[1]<p[3];});
-      holes=holes.filter(function(h){return !holes.some(function(o){return o!==h&&o.px[0]<=h.px[0]+0.5&&o.px[1]<=h.px[1]+0.5&&o.px[2]>=h.px[2]-0.5&&o.px[3]>=h.px[3]-0.5;});});
   if(holes.length){x.beginPath();x.rect(-5,-5,W+10,H+10);holes.forEach(function(t){x.rect(t.px[0],t.px[1],t.px[2]-t.px[0],t.px[3]-t.px[1]);});x.clip('evenodd');}}
  function out(b){return b[2]*zp-ox<0||b[0]*zp-ox>W||b[3]*zp-oy<0||b[1]*zp-oy>H;}
  tiles.forEach(function(r){
