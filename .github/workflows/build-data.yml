@@ -54,6 +54,7 @@ jobs:
             git config user.email "github-actions@users.noreply.github.com"
             git add tiles-data
             git commit -m "Aggiorna i tasselli" || echo "Nessun cambiamento"
+            git pull --rebase origin main
             git push
           else
             echo "Nessun tassello da salvare"
