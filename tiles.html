@@ -231,7 +231,10 @@ function render(){
 map.on('moveend zoomend resize',function(){update();});
 function xform(pt,scale){[cB,cL].forEach(function(c){L.DomUtil.setTransform(c,pt,scale);});}
 map.on('zoomanim',function(e){if(!curLL)return;xform(map._latLngToNewLayerPoint(curLL,e.zoom,e.center),map.getZoomScale(e.zoom,curZ));});
-map.on('zoom',function(){if(!curLL||map._animatingZoom)return;xform(map.latLngToLayerPoint(curLL),map.getZoomScale(map.getZoom(),curZ));});
+var zq=0;
+map.on('zoom',function(){if(!curLL||map._animatingZoom)return;
+ xform(map.latLngToLayerPoint(curLL),map.getZoomScale(map.getZoom(),curZ));
+ if(!zq)zq=requestAnimationFrame(function(){zq=0;update();});});
 
 // --- interazioni ---
 map.on('click',function(e){
