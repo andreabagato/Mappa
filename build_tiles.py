@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Prepara i tasselli batimetrici a tre livelli (base, medio, fine) per il test Campania-Sardegna.
+"""Prepara i tasselli batimetrici a tre livelli (base, medio, fine), a lotti.
 
+Versione 4: l'AREA si sceglie a ogni lancio (variabile BBOX = "lat_min,lat_max,lon_min,lon_max").
+I lotti si sommano: i file gia' presenti non vengono scaricati di nuovo.
 Versione 3: RIPRENDE da dove si era fermata.
 - I tasselli gia' presenti in tiles-data/ non vengono scaricati di nuovo.
 - Ha un tempo massimo (MAX_MINUTES, predefinito 300): allo scadere si ferma in modo pulito,
@@ -20,20 +22,31 @@ Solo libreria standard di Python.
 import array, csv, gzip, io, json, math, os, sys, time, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
-BBOX = {"lat_min": 39.0, "lat_max": 41.3, "lon_min": 9.5, "lon_max": 15.8}  # tratta Campania-Sardegna
+def parse_bbox():
+    raw = os.environ.get("BBOX", "").strip() or "39.0,41.3,9.5,15.8"   # predefinita: tratta Campania-Sardegna
+    try:
+        a, b, c, d = [float(v) for v in raw.replace(";", ",").split(",")]
+    except ValueError:
+        raise SystemExit("Area non valida: scrivere lat_min,lat_max,lon_min,lon_max (es. 39.0,41.3,9.5,15.8)")
+    if not (a < b and c < d and 30 <= a and b <= 60 and 0 <= c and d <= 40):
+        raise SystemExit("Area fuori dai limiti previsti (lat 30-60, lon 0-40, minimo < massimo): " + raw)
+    return {"lat_min": a, "lat_max": b, "lon_min": c, "lon_max": d}
+
+
+BBOX = parse_bbox()
 OUT = "tiles-data"
 SP = 960          # celle per grado
 CELLS = 240
 SCALE = 4         # quarti di metro
 NODATA = -32768
 STRIDE = {"C": 16, "M": 4, "F": 1}
-MAX_FINE = 220    # limite di sicurezza sul numero di tasselli fini
+MAX_FINE = int(os.environ.get("MAX_FINE", "3000"))   # limite di sicurezza sul numero di tasselli fini per lancio
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "300"))   # tempo massimo di lavoro
 COAST_MAX_CONSECUTIVE_FAILS = 6   # dopo tanti fallimenti di fila la costa si interrompe
 PAUSE = 3         # secondi tra una richiesta e l'altra a ERDDAP
 COAST_PAUSE = 6   # secondi tra una richiesta e l'altra a Overpass
 BASE = "https://erddap.emodnet.eu/erddap/griddap/bathymetry_dtm_2024.csv"
-UA = "mappa-isobate-prototipo/0.3 (progetto personale; GitHub Actions)"
+UA = "mappa-isobate-prototipo/0.4 (progetto personale; GitHub Actions)"
 OVERPASS = ["https://overpass-api.de/api/interpreter",
             "https://overpass.private.coffee/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter"]
@@ -131,7 +144,7 @@ def write_tile(level, ti, tj, arr):
     path = tile_path(level, ti, tj)
     tmp = path + ".part"
     with open(tmp, "wb") as f:
-        f.write(gzip.compress(a.tobytes(), 9))
+        f.write(gzip.compress(a.tobytes(), 9, mtime=0))
     os.replace(tmp, path)   # il file compare solo quando e' completo
     return os.path.getsize(path)
 
@@ -273,6 +286,7 @@ def main():
     L0, M0 = anchors()
     print(f"Ancore griglia: lat {L0}, lon {M0}", flush=True)
     print(f"Tempo massimo: {MAX_MINUTES:.0f} minuti", flush=True)
+    print("Area di questo lancio:", BBOX, flush=True)
     B = BBOX
     state = load_state()
     fails, notes = [], []
@@ -348,41 +362,52 @@ def main():
             print(f"F {n}/{len(todo)}", flush=True)
         time.sleep(PAUSE)
 
-    # --- costa e scogli ---
+    # --- costa e scogli: solo nei tasselli di 1 grado che contengono tasselli fini ---
+    coast_wanted = sorted({(ti // 4, tj // 4) for ti, tj in fine})
     consecutive = 0
     coast_skipped = False
-    for ti in tile_range("M", B["lat_min"], B["lat_max"], L0):
-        for tj in tile_range("M", B["lon_min"], B["lon_max"], M0):
-            key = f"{ti}_{tj}"
-            if os.path.exists(coast_path(ti, tj)) or key in state["coast_done"]:
-                continue
-            if coast_skipped:
-                continue
-            if out_of_time():
-                stopped = True
+    print(f"Costa: {len(coast_wanted)} tasselli di 1 grado interessati", flush=True)
+    for ti, tj in coast_wanted:
+        key = f"{ti}_{tj}"
+        if os.path.exists(coast_path(ti, tj)) or key in state["coast_done"]:
+            continue
+        if coast_skipped:
+            continue
+        if out_of_time():
+            stopped = True
+            coast_skipped = True
+            continue
+        try:
+            b = coast_tile(ti, tj, L0, M0)
+            state["coast_done"].append(key)
+            save_state(state)
+            consecutive = 0
+            print(f"costa {key} ok ({b} byte)", flush=True)
+        except Exception as e:  # noqa: BLE001
+            fails.append(f"costa {key}: {e}")
+            consecutive += 1
+            if consecutive >= COAST_MAX_CONSECUTIVE_FAILS:
+                notes.append("Overpass non risponde: costa interrotta, si riprende al prossimo lancio")
                 coast_skipped = True
-                continue
-            try:
-                b = coast_tile(ti, tj, L0, M0)
-                state["coast_done"].append(key)
-                save_state(state)
-                consecutive = 0
-                print(f"costa {key} ok ({b} byte)", flush=True)
-            except Exception as e:  # noqa: BLE001
-                fails.append(f"costa {key}: {e}")
-                consecutive += 1
-                if consecutive >= COAST_MAX_CONSECUTIVE_FAILS:
-                    notes.append("Overpass non risponde: costa interrotta, si riprende al prossimo lancio")
-                    coast_skipped = True
-            time.sleep(COAST_PAUSE)
+        time.sleep(COAST_PAUSE)
 
     if stopped:
         notes.append("tempo massimo raggiunto: lavoro parziale, rilanciare per continuare")
 
     levels = {lv: listing(lv, ".bin.gz") for lv in ("C", "M", "F")}
     coast = listing("coast", ".json")
+    tot_bbox = dict(B)
+    try:
+        with open(os.path.join(OUT, "tiles.json"), encoding="utf-8") as f:
+            old = json.load(f).get("bbox") or {}
+        tot_bbox = {"lat_min": min(B["lat_min"], old.get("lat_min", B["lat_min"])),
+                    "lat_max": max(B["lat_max"], old.get("lat_max", B["lat_max"])),
+                    "lon_min": min(B["lon_min"], old.get("lon_min", B["lon_min"])),
+                    "lon_max": max(B["lon_max"], old.get("lon_max", B["lon_max"]))}
+    except Exception:  # noqa: BLE001
+        pass
     meta = {"built_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "lat0": L0, "lon0": M0,
-            "scale": SCALE, "levels": levels, "coast": coast, "bbox": B, "failed": fails, "notes": notes}
+            "scale": SCALE, "levels": levels, "coast": coast, "bbox": tot_bbox, "failed": fails, "notes": notes}
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "tiles.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, separators=(",", ":"))
