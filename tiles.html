@@ -33,6 +33,7 @@
  <label style="display:block">Trasparenza dei colori<input type="range" id="op" min="0" max="100" value="50" style="width:100%"></label>
  <button id="redraw">Ridisegna</button>
  <h2>Livelli di dettaglio</h2>
+ <p>Le zone <b>tratteggiate</b> sono vicino alla costa dove EMODnet non ha dati: la profondità è solo ipotizzata dai punti vicini.</p>
  <p>Si caricano da soli in base allo zoom: base su tutto il mare, poi medio (da zoom 8) e fine (da zoom 10), solo dove il fondale è meno profondo.</p>
  <div id="status">Carico l'elenco dei tasselli…</div>
  <div class="warn"><b>Solo prova di valutazione.</b> Dati EMODnet, celle fino a ~100 m, quote riferite a LAT. Non usare per la navigazione né per la sicurezza in mare.</div>
@@ -61,11 +62,13 @@ function mercY(lat){var s=Math.sin(lat*Math.PI/180);return 0.5-Math.log((1+s)/(1
 
 // --- funzioni di calcolo (costa e riempimento) ---
 function dilate(src,nx,ny,K){
- var out=new Float32Array(src),dist=new Int16Array(nx*ny).fill(-1),q=new Int32Array(nx*ny),h=0,t=0,i;
- for(i=0;i<src.length;i++) if(src[i]>0){dist[i]=0;q[t++]=i;}
- while(h<t){var c=q[h++],d=dist[c];if(d>=K)continue;var cx=c%nx,cy=(c-cx)/nx;
+ var out=new Float32Array(src),seen=new Uint8Array(nx*ny),sx=new Int16Array(nx*ny),sy=new Int16Array(nx*ny),q=new Int32Array(nx*ny),h=0,t=0,i,K2=K*K;
+ for(i=0;i<src.length;i++) if(src[i]>0){seen[i]=1;sx[i]=i%nx;sy[i]=(i-i%nx)/nx;q[t++]=i;}
+ while(h<t){var c=q[h++],cx=c%nx,cy=(c-cx)/nx;
   for(var dy=-1;dy<=1;dy++)for(var dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;var x=cx+dx,y=cy+dy;
-   if(x<0||y<0||x>=nx||y>=ny)continue;var n=y*nx+x;if(dist[n]!==-1)continue;dist[n]=d+1;out[n]=out[c];q[t++]=n;}}
+   if(x<0||y<0||x>=nx||y>=ny)continue;var n=y*nx+x;if(seen[n])continue;
+   var ex=x-sx[c],ey=y-sy[c];if(ex*ex+ey*ey>K2)continue;
+   seen[n]=1;sx[n]=sx[c];sy[n]=sy[c];out[n]=out[c];q[t++]=n;}}
  return out;
 }
 function landSpans(ways,W,H,ox,oy,zp){
@@ -121,7 +124,10 @@ function buildGeom(rec){
   if(lv===0&&rec.L==='F'&&coastWays.length)return;
   lines.push({color:lv===0?'#fff':(lv%50===0?'#ffe08a':'#fff3c4'),w:lv===0?1.6:(lv%50===0?1.6:0.9),runs:runs});
  });
- rec.geom={bands:bands,lines:lines};
+ var gaps=[];
+ if(rec.fill){var gm=new Float32Array(N*N);for(var gi=0;gi<gm.length;gi++)gm[gi]=(rec.depth[gi]<=0&&rec.fill[gi]>0)?1:0;
+  var gmp=gen.contour(gm,0.5);gmp.coordinates.forEach(function(poly){poly.forEach(function(ring){gaps.push(pack(ring));});});}
+ rec.geom={bands:bands,lines:lines,gaps:gaps};
 }
 function ungzip(buf){
  var s=new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
@@ -135,7 +141,7 @@ function ensure(L,ti,tj){
   var raw=new Int16Array(b);if(raw.length!==N*N)throw 0;
   var d=new Float32Array(raw.length);
   for(var i=0;i<raw.length;i++)d[i]=raw[i]===-32768?-100:-raw[i]/T.scale;
-  rec.depth=d;rec.fill=(L==='F')?dilate(d,N,N,5):null;rec.st=1;report();render();
+  rec.depth=d;rec.fill=(L==='F')?dilate(d,N,N,10):null;rec.st=1;report();render();
  }).catch(function(){rec.st=-1;report();});
 }
 function ensureCoast(ti,tj){
@@ -175,6 +181,10 @@ function update(){
 var cB=document.createElement('canvas'),cL=document.createElement('canvas');
 [cB,cL].forEach(function(c){c.style.cssText='position:absolute;left:0;top:0;pointer-events:none';});
 map.getPane('bands').appendChild(cB);map.getPane('isolines').appendChild(cL);
+var hatchPat=null;
+function hatch(x){if(hatchPat)return hatchPat;var c=document.createElement('canvas');c.width=c.height=10;var g=c.getContext('2d');
+ g.strokeStyle='rgba(255,255,255,0.9)';g.lineWidth=1.6;g.beginPath();g.moveTo(-2,12);g.lineTo(12,-2);g.moveTo(-2,7);g.lineTo(7,-2);g.moveTo(3,12);g.lineTo(12,3);g.stroke();
+ hatchPat=x.createPattern(c,'repeat');return hatchPat;}
 function render(){
  var size=map.getSize(),px=Math.round(size.x*0.25),py=Math.round(size.y*0.25),W=size.x+2*px,H=size.y+2*py,dpr=window.devicePixelRatio||1;
  var pb=map.getPixelBounds(),ox=Math.round(pb.min.x)-px,oy=Math.round(pb.min.y)-py,zp=256*Math.pow(2,map.getZoom());
@@ -195,10 +205,18 @@ function render(){
  tiles.forEach(function(r){
   if(showB){var x=cx[0];clip(x,r);r.geom.bands.forEach(function(bd){x.fillStyle=bd.color;x.beginPath();
    bd.rings.forEach(function(g){if(out(g.b))return;var p=g.p;x.moveTo(p[0]*zp-ox,p[1]*zp-oy);
-    for(var i=2;i<p.length;i+=2)x.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);x.closePath();});x.fill('evenodd');});x.restore();}
+    for(var i=2;i<p.length;i+=2)x.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);x.closePath();});x.fill('evenodd');});
+   if(r.geom.gaps.length){x.fillStyle=hatch(x);x.beginPath();r.geom.gaps.forEach(function(g){if(out(g.b))return;var p=g.p;x.moveTo(p[0]*zp-ox,p[1]*zp-oy);
+    for(var i=2;i<p.length;i+=2)x.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);x.closePath();});x.fill('evenodd');}
+   x.restore();}
   if(showL){var y=cx[1];clip(y,r);y.lineJoin='round';r.geom.lines.forEach(function(ln){y.strokeStyle=ln.color;y.lineWidth=ln.w;y.beginPath();
    ln.runs.forEach(function(g){if(out(g.b))return;var p=g.p;y.moveTo(p[0]*zp-ox,p[1]*zp-oy);
-    for(var i=2;i<p.length;i+=2)y.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);});y.stroke();});y.restore();}});
+    for(var i=2;i<p.length;i+=2)y.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);});y.stroke();});
+   if(r.geom.gaps.length){y.globalCompositeOperation='destination-out';y.fillStyle='#000';y.beginPath();
+    r.geom.gaps.forEach(function(g){if(out(g.b))return;var p=g.p;y.moveTo(p[0]*zp-ox,p[1]*zp-oy);
+     for(var i=2;i<p.length;i+=2)y.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);y.closePath();});
+    y.fill('evenodd');y.globalCompositeOperation='source-over';}
+   y.restore();}});
  if(coastWays.length){var sp=landSpans(coastWays,W,H,ox,oy,zp);
   cx.forEach(function(x){x.globalCompositeOperation='destination-out';x.fillStyle='#000';x.beginPath();
    for(var i=0;i<sp.length;i+=3){var a=Math.max(0,sp[i+1]),b=Math.min(W,sp[i+2]);if(b>a)x.rect(a,sp[i],b-a,1);}
@@ -219,7 +237,8 @@ map.on('click',function(e){
   var s=LV[L].s,st=240*s/960,ti=Math.floor((la-T.lat0)/st),tj=Math.floor((lo-T.lon0)/st),r=store[L+ti+'_'+tj];
   if(!r||r.st!==1)return false;var g=r.g,i=Math.round((lo-g.lon0)/g.d),j=Math.round((g.lat0-la)/g.d);
   if(i<0||j<0||i>=N||j>=N)return false;var d=r.depth[j*N+i];
-  txt=land===true?'Terraferma':(d>0?'Profondità stimata: <b>'+d.toFixed(1)+' m</b><br>cella ~'+Math.round(s*104)+' m, riferita a LAT':'Terraferma o dato assente');
+  var f=r.fill?r.fill[j*N+i]:0;
+  txt=land===true?'Terraferma':(d>0?'Profondità stimata: <b>'+d.toFixed(1)+' m</b><br>cella ~'+Math.round(s*104)+' m, riferita a LAT':(f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
   return true;});
  L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);});
 document.getElementById('redraw').onclick=function(){for(var k in store)store[k].geom=null;render();};
