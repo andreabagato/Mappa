@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepara i tasselli batimetrici a tre livelli (base, medio, fine), a lotti.
 
+Versione 5: la costa si chiede a Overpass in 4 richieste piu' leggere per quadrato (timeout 90 s, un tentativo per server).
 Versione 4: l'AREA si sceglie a ogni lancio (variabile BBOX = "lat_min,lat_max,lon_min,lon_max").
 I lotti si sommano: i file gia' presenti non vengono scaricati di nuovo.
 Versione 3: RIPRENDE da dove si era fermata.
@@ -42,11 +43,12 @@ NODATA = -32768
 STRIDE = {"C": 16, "M": 4, "F": 1}
 MAX_FINE = int(os.environ.get("MAX_FINE", "3000"))   # limite di sicurezza sul numero di tasselli fini per lancio
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "300"))   # tempo massimo di lavoro
-COAST_MAX_CONSECUTIVE_FAILS = 6   # dopo tanti fallimenti di fila la costa si interrompe
+COAST_MAX_CONSECUTIVE_FAILS = 4   # dopo tanti fallimenti di fila la costa si interrompe
+COAST_SPLIT = 2   # ogni quadrato di 1 grado si chiede a Overpass in 2x2 richieste
 PAUSE = 3         # secondi tra una richiesta e l'altra a ERDDAP
-COAST_PAUSE = 6   # secondi tra una richiesta e l'altra a Overpass
+COAST_PAUSE = 4   # secondi tra una richiesta e l'altra a Overpass
 BASE = "https://erddap.emodnet.eu/erddap/griddap/bathymetry_dtm_2024.csv"
-UA = "mappa-isobate-prototipo/0.4 (progetto personale; GitHub Actions)"
+UA = "mappa-isobate-prototipo/0.5 (progetto personale; GitHub Actions)"
 OVERPASS = ["https://overpass-api.de/api/interpreter",
             "https://overpass.private.coffee/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter"]
@@ -164,13 +166,17 @@ def read_tile(level, ti, tj):
 
 # ---- costa e scogli ----
 def overpass(q):
+    """Un tentativo per server (timeout 90 s). Il server che risponde passa in testa per le richieste successive."""
     last = None
-    for ep in OVERPASS:
+    for ep in list(OVERPASS):
         try:
-            data = json.loads(get(ep, data=urllib.parse.urlencode({"data": q}).encode(), timeout=120, tries=2))
+            data = json.loads(get(ep, data=urllib.parse.urlencode({"data": q}).encode(), timeout=90, tries=1))
             rem = str(data.get("remark", "")).lower()
             if "error" in rem or "timed out" in rem:
                 raise RuntimeError(rem)
+            if OVERPASS[0] != ep:
+                OVERPASS.remove(ep)
+                OVERPASS.insert(0, ep)
             return data
         except Exception as e:  # noqa: BLE001
             last = e
@@ -220,32 +226,39 @@ def coast_path(ti, tj):
 
 
 def coast_tile(ti, tj, L0, M0):
+    """Costa e scogli di un quadrato di 1 grado, chiesti a Overpass in COAST_SPLIT x COAST_SPLIT richieste piu' leggere.
+    Il file si scrive solo se TUTTE le richieste riescono (una costa a meta' farebbe disegnare il mare sulla terra)."""
     st = CELLS * 4 / SP
-    s, w = L0 + ti * st, M0 + tj * st
-    n, e = s + st, w + st
+    S0, W0 = L0 + ti * st, M0 + tj * st
+    sub = st / COAST_SPLIT
     m = 0.01
-    bb = "%.5f,%.5f,%.5f,%.5f" % (s - m, w - m, n + m, e + m)
-    q = ('[out:json][timeout:100];(way["natural"="coastline"](%s);'
-         'node["seamark:type"~"^(rock|wreck|obstruction)$"](%s);'
-         'node["natural"~"^(reef|shoal)$"](%s);way["natural"~"^(reef|shoal)$"](%s););out geom tags;' % (bb, bb, bb, bb))
     ways, pts = [], []
-    for el in overpass(q).get("elements", []):
-        t = el.get("tags") or {}
-        if el["type"] == "way" and t.get("natural") == "coastline" and el.get("geometry"):
-            line = [(p["lat"], p["lon"]) for p in el["geometry"]]
-            for run in clip_run(line, s - m, w - m, n + m, e + m):
-                ways.append([round(v, 6) for p in run for v in p])
-        else:
-            if el["type"] == "node":
-                la, lo = el["lat"], el["lon"]
-            elif el.get("geometry"):
-                la = sum(p["lat"] for p in el["geometry"]) / len(el["geometry"])
-                lo = sum(p["lon"] for p in el["geometry"]) / len(el["geometry"])
-            else:
-                continue
-            if s <= la < n and w <= lo < e:  # ogni punto in un solo tassello
-                pts.append({"lat": round(la, 6), "lon": round(lo, 6), "kind": t.get("seamark:type") or t.get("natural", ""),
-                            "name": t.get("name", ""), "level": t.get("seamark:rock:water_level", "")})
+    for a in range(COAST_SPLIT):
+        for c in range(COAST_SPLIT):
+            s, w = S0 + a * sub, W0 + c * sub
+            n, e = s + sub, w + sub
+            bb = "%.5f,%.5f,%.5f,%.5f" % (s - m, w - m, n + m, e + m)
+            q = ('[out:json][timeout:80];(way["natural"="coastline"](%s);'
+                 'node["seamark:type"~"^(rock|wreck|obstruction)$"](%s);'
+                 'node["natural"~"^(reef|shoal)$"](%s);way["natural"~"^(reef|shoal)$"](%s););out geom tags;' % (bb, bb, bb, bb))
+            for el in overpass(q).get("elements", []):
+                t = el.get("tags") or {}
+                if el["type"] == "way" and t.get("natural") == "coastline" and el.get("geometry"):
+                    line = [(p["lat"], p["lon"]) for p in el["geometry"]]
+                    for run in clip_run(line, s - m, w - m, n + m, e + m):
+                        ways.append([round(v, 6) for p in run for v in p])
+                else:
+                    if el["type"] == "node":
+                        la, lo = el["lat"], el["lon"]
+                    elif el.get("geometry"):
+                        la = sum(p["lat"] for p in el["geometry"]) / len(el["geometry"])
+                        lo = sum(p["lon"] for p in el["geometry"]) / len(el["geometry"])
+                    else:
+                        continue
+                    if s <= la < n and w <= lo < e:  # ogni punto in un solo sotto-quadrato
+                        pts.append({"lat": round(la, 6), "lon": round(lo, 6), "kind": t.get("seamark:type") or t.get("natural", ""),
+                                    "name": t.get("name", ""), "level": t.get("seamark:rock:water_level", "")})
+            time.sleep(COAST_PAUSE)
     if not ways and not pts:
         return 0
     d = os.path.join(OUT, "coast")
