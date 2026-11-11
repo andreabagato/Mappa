@@ -29,6 +29,7 @@
  <input type="text" id="levels" value="5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500, 1000, 2000">
  <label><input type="checkbox" id="bands" checked> Colora per profondità</label>
  <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
+ <label><input type="checkbox" id="dbg"> Mostra i bordi dei tasselli (diagnosi)</label>
  <label style="display:block">Trasparenza dei colori<input type="range" id="op" min="0" max="100" value="50" style="width:100%"></label>
  <button id="redraw">Ridisegna</button>
  <h2>Livelli di dettaglio</h2>
@@ -199,9 +200,13 @@ function render(){
    ln.runs.forEach(function(g){if(out(g.b))return;var p=g.p;y.moveTo(p[0]*zp-ox,p[1]*zp-oy);
     for(var i=2;i<p.length;i+=2)y.lineTo(p[i]*zp-ox,p[i+1]*zp-oy);});y.stroke();});y.restore();}});
  if(coastWays.length){var sp=landSpans(coastWays,W,H,ox,oy,zp);
-  cx.forEach(function(x){x.globalCompositeOperation='destination-out';x.fillStyle='#000';
-   for(var i=0;i<sp.length;i+=3){var a=Math.max(0,sp[i+1]),b=Math.min(W,sp[i+2]);if(b>a)x.fillRect(a,sp[i],b-a,1);}
-   x.globalCompositeOperation='source-over';});}
+  cx.forEach(function(x){x.globalCompositeOperation='destination-out';x.fillStyle='#000';x.beginPath();
+   for(var i=0;i<sp.length;i+=3){var a=Math.max(0,sp[i+1]),b=Math.min(W,sp[i+2]);if(b>a)x.rect(a,sp[i],b-a,1);}
+   x.fill();x.globalCompositeOperation='source-over';});}
+ if(document.getElementById('dbg').checked){var y2=cx[1];y2.lineWidth=2;y2.font='12px sans-serif';
+  tiles.forEach(function(r){y2.strokeStyle=y2.fillStyle=({C:'#ff3b30',M:'#ff9500',F:'#00a650'})[r.L];
+   y2.setLineDash(r.L==='F'?[]:(r.L==='M'?[8,4]:[2,6]));y2.strokeRect(r.px[0],r.px[1],r.px[2]-r.px[0],r.px[3]-r.px[1]);
+   y2.fillText(r.L+r.ti+'_'+r.tj,Math.max(px+4,r.px[0]+4),Math.max(py+14,r.px[1]+14));});y2.setLineDash([]);}
 }
 map.on('zoomstart',function(){cB.style.display=cL.style.display='none';});
 map.on('moveend zoomend resize',function(){cB.style.display=cL.style.display='block';update();});
@@ -218,7 +223,7 @@ map.on('click',function(e){
   return true;});
  L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);});
 document.getElementById('redraw').onclick=function(){for(var k in store)store[k].geom=null;render();};
-document.getElementById('bands').onchange=document.getElementById('lines').onchange=render;
+document.getElementById('bands').onchange=document.getElementById('lines').onchange=document.getElementById('dbg').onchange=render;
 document.getElementById('op').oninput=function(e){map.getPane('bands').style.opacity=e.target.value/100;};
 
 fetch('data/tiles.json',{cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(t){
