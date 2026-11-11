@@ -6,9 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       prepara_tasselli:
-        description: "Prepara i tasselli del test Campania-Sardegna (lungo: 30-60 minuti)"
+        description: "Prepara i tasselli (lungo: da 20 minuti a qualche ora)"
         type: boolean
         default: false
+      area:
+        description: "Area del lotto: lat_min,lat_max,lon_min,lon_max (es. 39.0,41.3,9.5,15.8)"
+        type: string
+        default: "39.0,41.3,9.5,15.8"
 
 permissions:
   contents: write
@@ -43,6 +47,8 @@ jobs:
       - name: Prepara i tasselli (solo se richiesto)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
         continue-on-error: true
+        env:
+          BBOX: ${{ inputs.area }}
         run: python build_tiles.py
 
       - name: Salva i tasselli nel repository
