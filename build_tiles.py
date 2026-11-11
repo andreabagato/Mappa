@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepara i tasselli batimetrici a tre livelli (base, medio, fine), a lotti.
 
+Versione 6: la costa si chiede prima dove c'e' terra nei tasselli fini; se Overpass non risponde fa pause e riprova.
 Versione 5: la costa si chiede a Overpass in 4 richieste piu' leggere per quadrato (timeout 90 s, un tentativo per server).
 Versione 4: l'AREA si sceglie a ogni lancio (variabile BBOX = "lat_min,lat_max,lon_min,lon_max").
 I lotti si sommano: i file gia' presenti non vengono scaricati di nuovo.
@@ -21,6 +22,7 @@ Valori: quote in quarti di metro (int16 little-endian, nord in alto, -32768 = ma
 Solo libreria standard di Python.
 """
 import array, csv, gzip, io, json, math, os, sys, time, urllib.parse, urllib.request
+from collections import deque
 from datetime import datetime, timezone
 
 def parse_bbox():
@@ -43,15 +45,19 @@ NODATA = -32768
 STRIDE = {"C": 16, "M": 4, "F": 1}
 MAX_FINE = int(os.environ.get("MAX_FINE", "3000"))   # limite di sicurezza sul numero di tasselli fini per lancio
 MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "300"))   # tempo massimo di lavoro
-COAST_MAX_CONSECUTIVE_FAILS = 4   # dopo tanti fallimenti di fila la costa si interrompe
+COAST_MAX_CONSECUTIVE_FAILS = 3   # dopo tanti fallimenti di fila si fa una pausa
+COAST_RETRY_WAIT = 600            # secondi di pausa prima di riprovare (Overpass sovraccarico)
+COAST_RETRY_ROUNDS = 3            # quante pause al massimo, poi la costa si interrompe
+COAST_TILE_TRIES = 3              # tentativi per ogni quadrato di costa (i falliti si riprovano in coda)
 COAST_SPLIT = 2   # ogni quadrato di 1 grado si chiede a Overpass in 2x2 richieste
 PAUSE = 3         # secondi tra una richiesta e l'altra a ERDDAP
 COAST_PAUSE = 4   # secondi tra una richiesta e l'altra a Overpass
 BASE = "https://erddap.emodnet.eu/erddap/griddap/bathymetry_dtm_2024.csv"
-UA = "mappa-isobate-prototipo/0.5 (progetto personale; GitHub Actions)"
+UA = "mappa-isobate-prototipo/0.6 (progetto personale; GitHub Actions)"
 OVERPASS = ["https://overpass-api.de/api/interpreter",
             "https://overpass.private.coffee/api/interpreter",
-            "https://overpass.kumi.systems/api/interpreter"]
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://overpass.openstreetmap.fr/api/interpreter"]
 
 START = time.time()
 
@@ -375,21 +381,28 @@ def main():
             print(f"F {n}/{len(todo)}", flush=True)
         time.sleep(PAUSE)
 
-    # --- costa e scogli: solo nei tasselli di 1 grado che contengono tasselli fini ---
-    coast_wanted = sorted({(ti // 4, tj // 4) for ti, tj in fine})
-    consecutive = 0
-    coast_skipped = False
-    print(f"Costa: {len(coast_wanted)} tasselli di 1 grado interessati", flush=True)
-    for ti, tj in coast_wanted:
-        key = f"{ti}_{tj}"
-        if os.path.exists(coast_path(ti, tj)) or key in state["coast_done"]:
+    # --- costa e scogli ---
+    # Prima i quadrati di 1 grado dove i tasselli fini hanno celle di terra (la costa serve per ritagliare il mare),
+    # poi quelli solo di mare (servono solo per scogli e relitti).
+    land_m, sea_m = set(), set()
+    for ti, tj in fine:
+        arr = read_tile("F", ti, tj)
+        if arr is None:
             continue
-        if coast_skipped:
-            continue
+        (land_m if NODATA in arr else sea_m).add((ti // 4, tj // 4))
+    sea_m -= land_m
+    wanted = sorted(land_m) + sorted(sea_m)
+    todo = [(ti, tj) for ti, tj in wanted
+            if not os.path.exists(coast_path(ti, tj)) and f"{ti}_{tj}" not in state["coast_done"]]
+    print(f"Costa: {len(wanted)} quadrati interessati ({len(land_m)} con terra), {len(todo)} da scaricare", flush=True)
+    queue = deque((ti, tj, 0) for ti, tj in todo)
+    consecutive, rounds_left = 0, COAST_RETRY_ROUNDS
+    while queue:
         if out_of_time():
             stopped = True
-            coast_skipped = True
-            continue
+            break
+        ti, tj, att = queue.popleft()
+        key = f"{ti}_{tj}"
         try:
             b = coast_tile(ti, tj, L0, M0)
             state["coast_done"].append(key)
@@ -397,11 +410,20 @@ def main():
             consecutive = 0
             print(f"costa {key} ok ({b} byte)", flush=True)
         except Exception as e:  # noqa: BLE001
-            fails.append(f"costa {key}: {e}")
             consecutive += 1
+            if att + 1 < COAST_TILE_TRIES:
+                queue.append((ti, tj, att + 1))      # si riprova in coda
+            else:
+                fails.append(f"costa {key}: {e}")
             if consecutive >= COAST_MAX_CONSECUTIVE_FAILS:
-                notes.append("Overpass non risponde: costa interrotta, si riprende al prossimo lancio")
-                coast_skipped = True
+                if rounds_left > 0:
+                    rounds_left -= 1
+                    consecutive = 0
+                    print(f"Overpass non risponde: pausa di {COAST_RETRY_WAIT // 60} minuti, poi riprovo", flush=True)
+                    time.sleep(COAST_RETRY_WAIT)
+                else:
+                    notes.append(f"Overpass non risponde: costa interrotta con {len(queue) + 1} quadrati da fare, si riprende al prossimo lancio")
+                    break
         time.sleep(COAST_PAUSE)
 
     if stopped:
