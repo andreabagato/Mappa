@@ -179,16 +179,18 @@ function update(){
 
 // --- disegno ---
 var cB=document.createElement('canvas'),cL=document.createElement('canvas');
-[cB,cL].forEach(function(c){c.style.cssText='position:absolute;left:0;top:0;pointer-events:none';});
+[cB,cL].forEach(function(c){c.style.cssText='position:absolute;left:0;top:0;pointer-events:none';c.className='leaflet-zoom-animated';});
 map.getPane('bands').appendChild(cB);map.getPane('isolines').appendChild(cL);
-var hatchPat=null;
+var curZ=null,curLL=null,hatchPat=null;
 function hatch(x){if(hatchPat)return hatchPat;var c=document.createElement('canvas');c.width=c.height=10;var g=c.getContext('2d');
  g.strokeStyle='rgba(255,255,255,0.9)';g.lineWidth=1.6;g.beginPath();g.moveTo(-2,12);g.lineTo(12,-2);g.moveTo(-2,7);g.lineTo(7,-2);g.moveTo(3,12);g.lineTo(12,3);g.stroke();
  hatchPat=x.createPattern(c,'repeat');return hatchPat;}
 function render(){
+ if(map._animatingZoom)return;
  var size=map.getSize(),px=Math.round(size.x*0.25),py=Math.round(size.y*0.25),W=size.x+2*px,H=size.y+2*py,dpr=window.devicePixelRatio||1;
  var pb=map.getPixelBounds(),ox=Math.round(pb.min.x)-px,oy=Math.round(pb.min.y)-py,zp=256*Math.pow(2,map.getZoom());
  var pos=L.point(ox,oy).subtract(map.getPixelOrigin());
+ curZ=map.getZoom();curLL=map.unproject(L.point(ox,oy),curZ);
  var cx=[cB,cL].map(function(c){c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';
   L.DomUtil.setPosition(c,pos);var x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);return x;});
  var showB=document.getElementById('bands').checked,showL=document.getElementById('lines').checked;
@@ -226,8 +228,10 @@ function render(){
    y2.setLineDash(r.L==='F'?[]:(r.L==='M'?[8,4]:[2,6]));y2.strokeRect(r.px[0],r.px[1],r.px[2]-r.px[0],r.px[3]-r.px[1]);
    y2.fillText(r.L+r.ti+'_'+r.tj,Math.max(px+4,r.px[0]+4),Math.max(py+14,r.px[1]+14));});y2.setLineDash([]);}
 }
-map.on('zoomstart',function(){cB.style.display=cL.style.display='none';});
-map.on('moveend zoomend resize',function(){cB.style.display=cL.style.display='block';update();});
+map.on('moveend zoomend resize',function(){update();});
+function xform(pt,scale){[cB,cL].forEach(function(c){L.DomUtil.setTransform(c,pt,scale);});}
+map.on('zoomanim',function(e){if(!curLL)return;xform(map._latLngToNewLayerPoint(curLL,e.zoom,e.center),map.getZoomScale(e.zoom,curZ));});
+map.on('zoom',function(){if(!curLL||map._animatingZoom)return;xform(map.latLngToLayerPoint(curLL),map.getZoomScale(map.getZoom(),curZ));});
 
 // --- interazioni ---
 map.on('click',function(e){
