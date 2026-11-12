@@ -53,7 +53,7 @@ map.attributionControl.addAttribution('Batimetria © EMODnet · costa © OpenStr
 map.createPane('bands').style.zIndex=350; map.getPane('bands').style.opacity=0.5;
 map.createPane('isolines').style.zIndex=450;
 var lineR=L.canvas({pane:'isolines'}), osmG=L.layerGroup().addTo(map);
-var T=null, avail={}, coastAvail={}, store={}, coastLoaded={}, coastWays=[], bytes=0, N=241;
+var T=null, avail={}, coastAvail={}, store={}, coastLoaded={}, coastTiles={}, bytes=0, N=241;
 var LV={C:{s:16,z:0,o:0},M:{s:4,z:8,o:1},F:{s:1,z:10,o:2}};
 var KIND={rock:'Scoglio',wreck:'Relitto',obstruction:'Ostacolo',reef:'Scogliera/secca',shoal:'Secca'};
 var statusEl=document.getElementById('status');
@@ -89,8 +89,9 @@ function landSpans(ways,W,H,ox,oy,zp,st){
  return spans;
 }
 function isLandAt(lat,lon){
+ var ct=coastTiles[Math.floor(lat-T.lat0)+'_'+Math.floor(lon-T.lon0)];if(!ct)return null;
  var best=Infinity,north=null;
- coastWays.forEach(function(w){var p=w.ll;
+ ct.ways.forEach(function(w){var p=w.ll;
   for(var i=0;i<p.length-2;i+=2){var la1=p[i],lo1=p[i+1],la2=p[i+2],lo2=p[i+3];
    if((la1<=lat&&la2>lat)||(la2<=lat&&la1>lat)){var x=lo1+(lat-la1)*(lo2-lo1)/(la2-la1);if(x>lon&&x<best){best=x;north=la2>la1;}}}});
  return north;
@@ -132,7 +133,7 @@ function buildGeom(rec){
     if(!cur.length)cur.push(a);cur.push(b);}
    if(cur.length>1)runs.push(pack(cur));});});
   bands.push({color:bandColor(lv),rings:rings});
-  if(lv===0&&rec.L==='F'&&coastWays.length)return;
+  if(lv===0&&rec.L==='F'&&coastAvail[Math.floor(rec.ti/4)+'_'+Math.floor(rec.tj/4)])return;
   lines.push({color:lv===0?'#fff':(lv%50===0?'#ffe08a':'#fff3c4'),w:lv===0?1.6:(lv%50===0?1.6:0.9),runs:runs});
  });
  var gaps=[];
@@ -159,11 +160,12 @@ function ensureCoast(ti,tj){
  var key=ti+'_'+tj;if(coastLoaded[key])return;coastLoaded[key]=1;
  fetch('data/coast/'+key+'.json').then(function(r){if(!r.ok)throw 0;bytes+=+r.headers.get('content-length')||0;return r.json();})
  .then(function(c){
+  var ct=coastTiles[key]={s:T.lat0+ti,w:T.lon0+tj,ways:[]};
   (c.ways||[]).forEach(function(a){
    var n=a.length/2,ll=new Float64Array(a.length),m=new Float64Array(a.length),line=[];
    for(var i=0;i<n;i++){ll[2*i]=a[2*i];ll[2*i+1]=a[2*i+1];m[2*i]=mercX(a[2*i+1]);m[2*i+1]=mercY(a[2*i]);line.push([a[2*i],a[2*i+1]]);}
    L.polyline(line,{renderer:lineR,color:'#fff',weight:2,interactive:false}).addTo(osmG);
-   coastWays.push({ll:ll,m:m});});
+   ct.ways.push({ll:ll,m:m});});
   (c.points||[]).forEach(function(p){
    var nm=(KIND[p.kind]||'Segnalazione')+(p.name?' – '+p.name:'');
    L.circleMarker([p.lat,p.lon],{renderer:lineR,radius:5,color:'#fff',weight:1.5,fillColor:'#e8403a',fillOpacity:1})
@@ -210,7 +212,7 @@ function render(){
  var cx=[cB,cL].map(function(c){c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';
   L.DomUtil.setPosition(c,pos);var x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);return x;});
  var showB=document.getElementById('bands').checked,showL=document.getElementById('lines').checked;
- var tiles=[];for(var k in store){var r=store[k];if(r.st!==1)continue;if(!r.geom)buildGeom(r);
+ var tiles=[];for(var k in store){var r=store[k];if(r.st!==1)continue;if(!r.geom){try{buildGeom(r);}catch(e){r.st=-1;continue;}}
   r.px=[mercX(r.g.lon0)*zp-ox,mercY(r.g.lat0)*zp-oy,mercX(r.g.lon0+240*r.g.d)*zp-ox,mercY(r.g.lat0-240*r.g.d)*zp-oy];
   if(r.px[2]<0||r.px[0]>W||r.px[3]<0||r.px[1]>H)continue;tiles.push(r);}
  tiles.sort(function(a,b){return LV[a.L].o-LV[b.L].o;});
@@ -231,10 +233,15 @@ function render(){
     r.geom.gaps.forEach(function(g){if(out(g.b))return;trace(y,g.p,zp,ox,oy,m2);y.closePath();});
     y.fill('evenodd');y.globalCompositeOperation='source-over';}
    y.restore();}});
- if(coastWays.length){var mst=lowRes?2:1,sp=landSpans(coastWays,W,H,ox,oy,zp,mst);
-  cx.forEach(function(x){x.globalCompositeOperation='destination-out';x.fillStyle='#000';x.beginPath();
+ var mst=lowRes?2:1;
+ for(var ck in coastTiles){var ct=coastTiles[ck];
+  var rx0=Math.floor(mercX(ct.w)*zp-ox),rx1=Math.ceil(mercX(ct.w+1)*zp-ox),ry0=Math.floor(mercY(ct.s+1)*zp-oy),ry1=Math.ceil(mercY(ct.s)*zp-oy);
+  if(rx1<0||rx0>W||ry1<0||ry0>H)continue;
+  var sp=landSpans(ct.ways,W,H,ox,oy,zp,mst);if(!sp.length)continue;
+  cx.forEach(function(x){x.save();x.beginPath();x.rect(rx0,ry0,rx1-rx0,ry1-ry0);x.clip();
+   x.globalCompositeOperation='destination-out';x.fillStyle='#000';x.beginPath();
    for(var i=0;i<sp.length;i+=3){var a=Math.max(0,sp[i+1]),b=Math.min(W,sp[i+2]);if(b>a)x.rect(a,sp[i]*mst,b-a,mst);}
-   x.fill();x.globalCompositeOperation='source-over';});}
+   x.fill();x.restore();});}
  if(document.getElementById('dbg').checked){var y2=cx[1];y2.lineWidth=2;y2.font='12px sans-serif';
   tiles.forEach(function(r){y2.strokeStyle=y2.fillStyle=({C:'#ff3b30',M:'#ff9500',F:'#00a650'})[r.L];
    y2.setLineDash(r.L==='F'?[]:(r.L==='M'?[8,4]:[2,6]));y2.strokeRect(r.px[0],r.px[1],r.px[2]-r.px[0],r.px[3]-r.px[1]);
@@ -252,7 +259,7 @@ map.on('zoom',function(){if(!curLL||map._animatingZoom)return;
 // --- interazioni ---
 map.on('click',function(e){
  if(!T)return;var la=e.latlng.lat,lo=e.latlng.lng,txt='Nessun dato qui';
- var land=coastWays.length?isLandAt(la,lo):null;
+ var land=isLandAt(la,lo);
  ['F','M','C'].some(function(L){
   var s=LV[L].s,st=240*s/960,ti=Math.floor((la-T.lat0)/st),tj=Math.floor((lo-T.lon0)/st),r=store[L+ti+'_'+tj];
   if(!r||r.st!==1)return false;var g=r.g,i=Math.round((lo-g.lon0)/g.d),j=Math.round((g.lat0-la)/g.d);
