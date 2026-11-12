@@ -12,7 +12,7 @@
  main{flex:1;display:flex;min-height:0} #map{flex:1;min-width:0}
  aside{width:320px;overflow-y:auto;padding:14px;border-right:1px solid #cfdde3;font-size:14px;line-height:1.45}
  h2{font-size:14px;margin:16px 0 6px} h2:first-child{margin-top:0}
- input[type=text]{width:100%;padding:7px;border:1px solid #cfdde3;border-radius:6px;font:inherit}
+ input[type=text],textarea{width:100%;padding:7px;border:1px solid #cfdde3;border-radius:6px;font:inherit}
  button{margin-top:8px;padding:8px 14px;border:0;border-radius:6px;background:#0b5d73;color:#fff;font:inherit;font-weight:600;cursor:pointer}
  label{display:flex;gap:8px;align-items:center;margin:6px 0}
  #status{margin-top:12px;padding:8px 10px;border-radius:6px;background:#f3f7f8;border:1px solid #cfdde3;font-size:13px;white-space:pre-line}
@@ -22,11 +22,12 @@
 </style>
 </head>
 <body>
-<header>Isobate – test a livelli di dettaglio (Campania – Sardegna)</header>
+<header>Isobate – test a livelli di dettaglio (Italia, lotti in corso)</header>
 <main>
 <aside>
  <h2>Profondità da disegnare (m)</h2>
- <input type="text" id="levels" value="5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500, 1000, 2000">
+ <textarea id="levels" rows="3">5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500</textarea>
+ <label style="display:block">Oltre l'ultima, una isobata ogni (m) – senza limite di profondità<input type="text" id="step" inputmode="numeric" value="500"></label>
  <label><input type="checkbox" id="bands" checked> Colora per profondità</label>
  <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
  <label><input type="checkbox" id="dbg"> Mostra i bordi dei tasselli (diagnosi)</label>
@@ -101,17 +102,27 @@ function geo(L,ti,tj){var s=LV[L].s,st=240*s/960;
 function parseLevels(){
  var v=document.getElementById('levels').value.split(/[;,\s]+/).map(parseFloat).filter(function(x){return !isNaN(x)&&x>0;});
  return Array.from(new Set(v)).sort(function(a,b){return a-b;});}
-function bandColor(d){return d3.interpolateRgb('#c9f0f2','#082a5c')(Math.min(1,Math.sqrt(d/250)));}
+var DEEP=[[250,'#082a5c'],[500,'#0a2350'],[1000,'#1a1b55'],[2000,'#241048'],[4000,'#12082a']];
+function bandColor(d){
+ if(d<=250)return d3.interpolateRgb('#c9f0f2','#082a5c')(Math.sqrt(d/250));
+ for(var i=1;i<DEEP.length;i++)if(d<=DEEP[i][0])return d3.interpolateRgb(DEEP[i-1][1],DEEP[i][1])((d-DEEP[i-1][0])/(DEEP[i][0]-DEEP[i-1][0]));
+ return DEEP[DEEP.length-1][1];}
+function allLevels(maxD){
+ var base=parseLevels(),st=parseFloat(document.getElementById('step').value);
+ if(!(st>0)||!base.length)return base;
+ var out=base.slice(),cap=base.length+40;
+ for(var v=base[base.length-1]+st;v<=maxD&&out.length<cap;v+=st)out.push(v);
+ return out;}
 function buildGeom(rec){
  var g=rec.g,gen=d3.contours().size([N,N]).smooth(true),eps=1e-6,bands=[],lines=[];
- var d=rec.fill||rec.depth;
+ var d=rec.fill||rec.depth,maxD=0;for(var mi=0;mi<d.length;mi++)if(d[mi]>maxD)maxD=d[mi];
  function pack(pts){var a=new Float64Array(pts.length*2),b=[Infinity,Infinity,-Infinity,-Infinity];
   pts.forEach(function(p,i){var x=mercX(g.lon0+(p[0]-0.5)*g.d),y=mercY(g.lat0-(p[1]-0.5)*g.d);
    a[2*i]=x;a[2*i+1]=y;if(x<b[0])b[0]=x;if(y<b[1])b[1]=y;if(x>b[2])b[2]=x;if(y>b[3])b[3]=y;});
   return {p:a,b:b};}
  function edge(p){return p[0]<=eps||p[0]>=N-eps||p[1]<=eps||p[1]>=N-eps;}
  function same(a,b){return (a[0]<=eps&&b[0]<=eps)||(a[0]>=N-eps&&b[0]>=N-eps)||(a[1]<=eps&&b[1]<=eps)||(a[1]>=N-eps&&b[1]>=N-eps);}
- [0].concat(parseLevels()).forEach(function(lv){
+ [0].concat(allLevels(maxD)).forEach(function(lv){
   var mp=gen.contour(d,lv);if(!mp.coordinates.length)return;
   var rings=[],runs=[];
   mp.coordinates.forEach(function(poly){poly.forEach(function(ring){
@@ -250,7 +261,10 @@ map.on('click',function(e){
   txt=land===true?'Terraferma':(d>0?'Profondità stimata: <b>'+d.toFixed(1)+' m</b><br>cella ~'+Math.round(s*104)+' m, riferita a LAT':(f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
   return true;});
  L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);});
-document.getElementById('redraw').onclick=function(){for(var k in store)store[k].geom=null;render();};
+function saveLv(){try{localStorage.setItem('iso_levels',document.getElementById('levels').value);localStorage.setItem('iso_step',document.getElementById('step').value);}catch(e){}}
+try{var sl=localStorage.getItem('iso_levels'),ss=localStorage.getItem('iso_step');
+ if(sl)document.getElementById('levels').value=sl;if(ss!==null)document.getElementById('step').value=ss;}catch(e){}
+document.getElementById('redraw').onclick=function(){saveLv();for(var k in store)store[k].geom=null;render();};
 document.getElementById('bands').onchange=document.getElementById('lines').onchange=document.getElementById('dbg').onchange=render;
 document.getElementById('op').oninput=function(e){map.getPane('bands').style.opacity=e.target.value/100;};
 
