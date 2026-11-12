@@ -18,6 +18,10 @@
  #status{margin-top:12px;padding:8px 10px;border-radius:6px;background:#f3f7f8;border:1px solid #cfdde3;font-size:13px;white-space:pre-line}
  .warn{margin-top:14px;padding:8px 10px;border-radius:6px;background:#fff4d6;color:#6b4b00;font-size:12.5px}
  .leaflet-tooltip.d{font-weight:700;background:#08414f;color:#fff;border:0}
+ #xh{position:absolute;left:50%;top:50%;width:0;height:0;z-index:700;pointer-events:none}
+ #xh svg{position:absolute;left:-14px;top:-14px}
+ #xht{position:absolute;left:0;top:20px;transform:translateX(-50%);white-space:nowrap;background:rgba(8,40,60,.82);color:#fff;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;text-align:center;line-height:1.25}
+ #xht small{display:block;font-weight:400;font-size:11px;opacity:.85}
  @media(max-width:760px){main{flex-direction:column-reverse} aside{width:100%;height:42%}}
 </style>
 </head>
@@ -30,6 +34,8 @@
  <label style="display:block">Oltre l'ultima, una isobata ogni (m) – senza limite di profondità<input type="text" id="step" inputmode="numeric" value="500"></label>
  <label><input type="checkbox" id="bands" checked> Colora per profondità</label>
  <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
+ <label><input type="checkbox" id="lbl" checked> Scritte di profondità sulle isobate</label>
+ <label><input type="checkbox" id="xhc"> Mirino con profondità al centro</label>
  <label><input type="checkbox" id="dbg"> Mostra i bordi dei tasselli (diagnosi)</label>
  <label style="display:block">Trasparenza dei colori<input type="range" id="op" min="0" max="100" value="50" style="width:100%"></label>
  <button id="redraw">Ridisegna</button>
@@ -134,7 +140,7 @@ function buildGeom(rec){
    if(cur.length>1)runs.push(pack(cur));});});
   bands.push({color:bandColor(lv),rings:rings});
   if(lv===0&&rec.L==='F'&&coastAvail[Math.floor(rec.ti/4)+'_'+Math.floor(rec.tj/4)])return;
-  lines.push({color:lv===0?'#fff':(lv%50===0?'#ffe08a':'#fff3c4'),w:lv===0?1.6:(lv%50===0?1.6:0.9),runs:runs});
+  lines.push({lv:lv,color:lv===0?'#fff':(lv%50===0?'#ffe08a':'#fff3c4'),w:lv===0?1.6:(lv%50===0?1.6:0.9),runs:runs});
  });
  var gaps=[];
  if(rec.fill){var gm=new Float32Array(N*N);for(var gi=0;gi<gm.length;gi++)gm[gi]=(rec.depth[gi]<=0&&rec.fill[gi]>0)?1:0;
@@ -173,6 +179,7 @@ function ensureCoast(ti,tj){
   render();}).catch(function(){});
 }
 function report(){
+ schedXh();
  var c={C:0,M:0,F:0};for(var k in store)if(store[k].st===1)c[store[k].L]++;
  say('Tasselli caricati – base: '+c.C+', medio: '+c.M+', fine: '+c.F+'\nScaricati finora: '+(bytes/1048576).toFixed(1)+' MB\nZoom attuale: '+map.getZoom()+
  (map.getZoom()<8?' (solo base)':map.getZoom()<10?' (base + medio)':' (base + medio + fine)')+'\nTocca la mappa per la profondità.');}
@@ -198,6 +205,55 @@ var curZ=null,curLL=null,hatchPat=null,lowRes=false,gesture=false;
 function hatch(x){if(hatchPat)return hatchPat;var c=document.createElement('canvas');c.width=c.height=10;var g=c.getContext('2d');
  g.strokeStyle='rgba(255,255,255,0.9)';g.lineWidth=1.6;g.beginPath();g.moveTo(-2,12);g.lineTo(12,-2);g.moveTo(-2,7);g.lineTo(7,-2);g.moveTo(3,12);g.lineTo(12,3);g.stroke();
  hatchPat=x.createPattern(c,'repeat');return hatchPat;}
+var LABEL_Z=[0,7,9,11,12.5],LABEL_GAP=300,LABEL_MIN=90,lblW={};
+var LF1='bold 12px "Segoe UI",Helvetica,Arial,sans-serif',LF2='bold 11px "Segoe UI",Helvetica,Arial,sans-serif';
+function lblClass(lv){
+ if(lv<=0)return 0;
+ if(lv>=500)return lv%500===0?1:2;
+ if(lv===50||lv===100||lv===200)return 1;
+ if(lv===20||lv===40||lv===75||lv===150||lv===300)return 2;
+ if(lv===5||lv===15)return 4;
+ return 3;}
+function inRings(rings,mx,my){var ins=false;
+ for(var k=0;k<rings.length;k++){var g=rings[k],b=g.b;if(mx<b[0]||mx>b[2]||my<b[1]||my>b[3])continue;var p=g.p,n=p.length/2;
+  for(var i=0,j=n-1;i<n;j=i++){var xi=p[2*i],yi=p[2*i+1],xj=p[2*j],yj=p[2*j+1];
+   if(((yi>my)!==(yj>my))&&(mx<(xj-xi)*(my-yi)/(yj-yi)+xi))ins=!ins;}}
+ return ins;}
+function labelCands(r,zp,ox,oy,out,z,W,H,cands){
+ r.geom.lines.forEach(function(ln){var c=lblClass(ln.lv);if(!c||z<LABEL_Z[c])return;
+  ln.runs.forEach(function(g){if(out(g.b))return;var p=g.p,n=p.length/2;if(n<2)return;
+   var xs=new Float32Array(n),ys=new Float32Array(n),cu=new Float32Array(n),i;
+   for(i=0;i<n;i++){xs[i]=p[2*i]*zp-ox;ys[i]=p[2*i+1]*zp-oy;if(i)cu[i]=cu[i-1]+Math.sqrt((xs[i]-xs[i-1])*(xs[i]-xs[i-1])+(ys[i]-ys[i-1])*(ys[i]-ys[i-1]));}
+   var len=cu[n-1];if(len<LABEL_MIN)return;
+   function pt(d){var lo=0,hi=n-1;while(hi-lo>1){var m=(lo+hi)>>1;if(cu[m]<=d)lo=m;else hi=m;}
+    var sl=cu[hi]-cu[lo],t=sl>0?(d-cu[lo])/sl:0;return [xs[lo]+(xs[hi]-xs[lo])*t,ys[lo]+(ys[hi]-ys[lo])*t];}
+   var last=-1e9;
+   for(var D=LABEL_MIN/2;D<=len-LABEL_MIN/2;D+=30){
+    if(D-last<LABEL_GAP)continue;
+    var a=pt(D-22),m=pt(D),b=pt(D+22),a1=Math.atan2(m[1]-a[1],m[0]-a[0]),a2=Math.atan2(b[1]-m[1],b[0]-m[0]),df=Math.abs(a1-a2);
+    if(df>Math.PI)df=2*Math.PI-df;
+    if(df>0.35)continue;                       // tratto troppo curvo
+    last=D;                                    // la posizione non dipende da cio' che e' visibile
+    if(m[0]<10||m[0]>W-10||m[1]<10||m[1]>H-10)continue;
+    cands.push({x:m[0],y:m[1],ang:Math.atan2(b[1]-a[1],b[0]-a[0]),lv:ln.lv,c:c,r:r,t:String(ln.lv)});}
+  });});}
+function drawLabels(y,cands,holesOf,zp,ox,oy){
+ cands.sort(function(a,b){return a.c-b.c;});
+ var placed=[],hc=new Map();
+ cands.forEach(function(c){
+  var r=c.r,hs=hc.get(r);if(!hs){hs=holesOf(r);hc.set(r,hs);}
+  for(var i=0;i<hs.length;i++){var h=hs[i].px;if(c.x>=h[0]-2&&c.x<=h[2]+2&&c.y>=h[1]-2&&c.y<=h[3]+2)return;}   // sotto un tassello piu' fine
+  if(r.geom.gaps.length&&inRings(r.geom.gaps,(c.x+ox)/zp,(c.y+oy)/zp))return;                              // zona senza dati
+  var key=(c.c===1?'b':'n')+c.t,w=lblW[key];
+  if(w===undefined){y.save();y.font=(c.c===1?LF1:LF2);w=lblW[key]=y.measureText(c.t).width;y.restore();}
+  var rad=w/2+5;
+  for(var k=0;k<placed.length;k++){var q=placed[k],dx=q.x-c.x,dy=q.y-c.y,mm=q.rad+rad;if(dx*dx+dy*dy<mm*mm)return;}
+  c.rad=rad;placed.push(c);});
+ y.save();y.textAlign='center';y.textBaseline='middle';y.lineJoin='round';
+ placed.forEach(function(c){y.save();y.translate(c.x,c.y);var a=c.ang;if(a>Math.PI/2||a<-Math.PI/2)a+=Math.PI;y.rotate(a);
+  y.font=(c.c===1?LF1:LF2);y.strokeStyle='rgba(6,27,56,.9)';y.lineWidth=3.2;y.strokeText(c.t,0,0);
+  y.fillStyle=(c.lv%50===0)?'#ffe08a':'#fffbe6';y.fillText(c.t,0,0);y.restore();});
+ y.restore();}
 function trace(c,p,zp,ox,oy,m2){
  var x=p[0]*zp-ox,y=p[1]*zp-oy,lx=x,ly=y,skipped=false;c.moveTo(x,y);
  for(var i=2;i<p.length;i+=2){x=p[i]*zp-ox;y=p[i+1]*zp-oy;var dx=x-lx,dy=y-ly;
@@ -221,6 +277,8 @@ function render(){
   /* correzione: un buco dentro un altro buco (tassello fine dentro uno medio) si annullerebbe con la regola pari/dispari: tengo solo i buchi piu' grandi */
   var all=holes;holes=all.filter(function(h){return !all.some(function(o){return o!==h&&o.px[0]<=h.px[0]+0.5&&o.px[1]<=h.px[1]+0.5&&o.px[2]>=h.px[2]-0.5&&o.px[3]>=h.px[3]-0.5;});});
   if(holes.length){x.beginPath();x.rect(-5,-5,W+10,H+10);holes.forEach(function(t){x.rect(t.px[0],t.px[1],t.px[2]-t.px[0],t.px[3]-t.px[1]);});x.clip('evenodd');}}
+function holesOf(r){var p=r.px,all=tiles.filter(function(t){return LV[t.L].o>LV[r.L].o&&t.px[2]>p[0]&&t.px[0]<p[2]&&t.px[3]>p[1]&&t.px[1]<p[3];});
+  return all.filter(function(h){return !all.some(function(o){return o!==h&&o.px[0]<=h.px[0]+0.5&&o.px[1]<=h.px[1]+0.5&&o.px[2]>=h.px[2]-0.5&&o.px[3]>=h.px[3]-0.5;});});}
  function out(b){return b[2]*zp-ox<0||b[0]*zp-ox>W||b[3]*zp-oy<0||b[1]*zp-oy>H;}
  tiles.forEach(function(r){
   if(showB){var x=cx[0];clip(x,r);r.geom.bands.forEach(function(bd){x.fillStyle=bd.color;x.beginPath();
@@ -233,6 +291,10 @@ function render(){
     r.geom.gaps.forEach(function(g){if(out(g.b))return;trace(y,g.p,zp,ox,oy,m2);y.closePath();});
     y.fill('evenodd');y.globalCompositeOperation='source-over';}
    y.restore();}});
+var lblOn=document.getElementById('lbl').checked;
+ if(lblOn&&showL&&!lowRes){var cands=[],zz=map.getZoom();
+  tiles.forEach(function(r){labelCands(r,zp,ox,oy,out,zz,W,H,cands);});
+  drawLabels(cx[1],cands,holesOf,zp,ox,oy);}
  var mst=lowRes?2:1;
  for(var ck in coastTiles){var ct=coastTiles[ck];
   var rx0=Math.floor(mercX(ct.w)*zp-ox),rx1=Math.ceil(mercX(ct.w+1)*zp-ox),ry0=Math.floor(mercY(ct.s+1)*zp-oy),ry1=Math.ceil(mercY(ct.s)*zp-oy);
@@ -257,20 +319,39 @@ map.on('zoom',function(){if(!curLL||map._animatingZoom)return;
  if(!zq)zq=requestAnimationFrame(function(){zq=0;if(gesture){lowRes=true;update();}});});
 
 // --- interazioni ---
-map.on('click',function(e){
- if(!T)return;var la=e.latlng.lat,lo=e.latlng.lng,txt='Nessun dato qui';
- var land=isLandAt(la,lo);
+function probe(la,lo){
+ if(!T)return null;
+ var land=isLandAt(la,lo),res=null;
  ['F','M','C'].some(function(L){
   var s=LV[L].s,st=240*s/960,ti=Math.floor((la-T.lat0)/st),tj=Math.floor((lo-T.lon0)/st),r=store[L+ti+'_'+tj];
   if(!r||r.st!==1)return false;var g=r.g,i=Math.round((lo-g.lon0)/g.d),j=Math.round((g.lat0-la)/g.d);
-  if(i<0||j<0||i>=N||j>=N)return false;var d=r.depth[j*N+i];
-  var f=r.fill?r.fill[j*N+i]:0;
-  txt=land===true?'Terraferma':(d>0?'Profondità stimata: <b>'+d.toFixed(1)+' m</b><br>cella ~'+Math.round(s*104)+' m, riferita a LAT':(f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
-  return true;});
+  if(i<0||j<0||i>=N||j>=N)return false;var d=r.depth[j*N+i],f=r.fill?r.fill[j*N+i]:0;
+  res={land:land,d:d,f:f,s:s};return true;});
+ return res||{none:true,land:land};}
+map.on('click',function(e){
+ if(!T)return;var p=probe(e.latlng.lat,e.latlng.lng),txt='Nessun dato qui';
+ if(p&&!p.none)txt=p.land===true?'Terraferma':(p.d>0?'Profondità stimata: <b>'+p.d.toFixed(1)+' m</b><br>cella ~'+Math.round(p.s*104)+' m, riferita a LAT':(p.f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+p.f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
  L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);});
-function saveLv(){try{localStorage.setItem('iso_levels',document.getElementById('levels').value);localStorage.setItem('iso_step',document.getElementById('step').value);}catch(e){}}
-try{var sl=localStorage.getItem('iso_levels'),ss=localStorage.getItem('iso_step');
- if(sl)document.getElementById('levels').value=sl;if(ss!==null)document.getElementById('step').value=ss;}catch(e){}
+
+// --- mirino con profondita' al centro ---
+var xhEl=document.createElement('div');xhEl.id='xh';xhEl.style.display='none';
+xhEl.innerHTML='<svg width="28" height="28" viewBox="0 0 28 28"><path d="M14 2v8M14 18v8M2 14h8M18 14h8" stroke="#000" stroke-width="4" stroke-linecap="round" opacity=".45" fill="none"/><path d="M14 2v8M14 18v8M2 14h8M18 14h8" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="14" cy="14" r="1.7" fill="#fff"/></svg><div id="xht"></div>';
+map.getContainer().appendChild(xhEl);
+var xht=document.getElementById('xht'),xhTimer=0;
+function xhText(p){
+ if(!p||p.none)return 'Nessun dato<small>in questo punto</small>';
+ if(p.land===true)return 'Terraferma';
+ if(p.d>0)return p.d.toFixed(p.d<10?1:0)+' m<small>cella ~'+Math.round(p.s*104)+' m</small>';
+ if(p.f>0)return '≈ '+Math.round(p.f)+' m<small>ipotizzata, poco affidabile</small>';
+ return 'Terraferma o dato assente';}
+function updXh(){xhTimer=0;if(!document.getElementById('xhc').checked)return;var c=map.getCenter();xht.innerHTML=xhText(probe(c.lat,c.lng));}
+function schedXh(){if(xhTimer||!document.getElementById('xhc').checked)return;xhTimer=setTimeout(updXh,120);}
+map.on('move zoom moveend zoomend',schedXh);
+function savePref(){try{localStorage.setItem('iso_lbl',document.getElementById('lbl').checked?'1':'0');localStorage.setItem('iso_xh',document.getElementById('xhc').checked?'1':'0');}catch(e){}}
+document.getElementById('lbl').onchange=function(){savePref();render();};
+document.getElementById('xhc').onchange=function(){xhEl.style.display=this.checked?'block':'none';savePref();updXh();};
+try{if(localStorage.getItem('iso_lbl')==='0')document.getElementById('lbl').checked=false;
+ if(localStorage.getItem('iso_xh')==='1'){document.getElementById('xhc').checked=true;xhEl.style.display='block';}}catch(e){}
 document.getElementById('redraw').onclick=function(){saveLv();for(var k in store)store[k].geom=null;render();};
 document.getElementById('bands').onchange=document.getElementById('lines').onchange=document.getElementById('dbg').onchange=render;
 document.getElementById('op').oninput=function(e){map.getPane('bands').style.opacity=e.target.value/100;};
