@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepara i tasselli batimetrici a tre livelli (base, medio, fine), a lotti.
 
+Versione 7: se ERDDAP rifiuta un tassello, lo script aspetta (1 e 2 minuti) e riprova prima di darlo per fallito.
 Versione 6: la costa si chiede prima dove c'e' terra nei tasselli fini; se Overpass non risponde fa pause e riprova.
 Versione 5: la costa si chiede a Overpass in 4 richieste piu' leggere per quadrato (timeout 90 s, un tentativo per server).
 Versione 4: l'AREA si sceglie a ogni lancio (variabile BBOX = "lat_min,lat_max,lon_min,lon_max").
@@ -53,7 +54,7 @@ COAST_SPLIT = 2   # ogni quadrato di 1 grado si chiede a Overpass in 2x2 richies
 PAUSE = 3         # secondi tra una richiesta e l'altra a ERDDAP
 COAST_PAUSE = 4   # secondi tra una richiesta e l'altra a Overpass
 BASE = "https://erddap.emodnet.eu/erddap/griddap/bathymetry_dtm_2024.csv"
-UA = "mappa-isobate-prototipo/0.6 (progetto personale; GitHub Actions)"
+UA = "mappa-isobate-prototipo/0.7 (progetto personale; GitHub Actions)"
 OVERPASS = ["https://overpass-api.de/api/interpreter",
             "https://overpass.private.coffee/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter",
@@ -137,6 +138,24 @@ def fetch_tile(level, ti, tj, L0, M0):
     for k in keys:
         out.extend(rows[k])
     return out
+
+
+PATIENT_ROUNDS = 3     # tentativi "pazienti" per ogni tassello (ERDDAP a volte rifiuta le connessioni per un po')
+PATIENT_WAIT = 60      # secondi di attesa dopo il primo giro, raddoppiano al secondo
+
+
+def fetch_tile_patient(level, ti, tj, L0, M0):
+    last = None
+    for r in range(PATIENT_ROUNDS):
+        try:
+            return fetch_tile(level, ti, tj, L0, M0)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if r < PATIENT_ROUNDS - 1:
+                w = PATIENT_WAIT * (r + 1)
+                print(f"   {level} {ti}_{tj}: riprovo tra {w} s", flush=True)
+                time.sleep(w)
+    raise last
 
 
 def tile_path(level, ti, tj):
@@ -321,7 +340,7 @@ def main():
                 stopped = True
                 continue
             try:
-                write_tile("C", ti, tj, fetch_tile("C", ti, tj, L0, M0))
+                write_tile("C", ti, tj, fetch_tile_patient("C", ti, tj, L0, M0))
                 print(f"C {ti}_{tj} ok", flush=True)
             except Exception as e:  # noqa: BLE001
                 fails.append(f"C {ti}_{tj}: {e}")
@@ -341,7 +360,7 @@ def main():
                 stopped = True
                 continue
             try:
-                arr = fetch_tile("M", ti, tj, L0, M0)
+                arr = fetch_tile_patient("M", ti, tj, L0, M0)
             except Exception as e:  # noqa: BLE001
                 fails.append(f"M {ti}_{tj}: {e}")
                 continue
@@ -374,7 +393,7 @@ def main():
             stopped = True
             break
         try:
-            write_tile("F", ti, tj, fetch_tile("F", ti, tj, L0, M0))
+            write_tile("F", ti, tj, fetch_tile_patient("F", ti, tj, L0, M0))
         except Exception as e:  # noqa: BLE001
             fails.append(f"F {ti}_{tj}: {e}")
         if n % 10 == 0:
