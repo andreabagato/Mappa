@@ -30,6 +30,12 @@ jobs:
       - name: Scarica i file del repository
         uses: actions/checkout@v4
 
+      - name: Parti dai dati piu' recenti (solo se si preparano i tasselli)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+
       - name: Installa Python
         uses: actions/setup-python@v5
         with:
@@ -53,7 +59,6 @@ jobs:
 
       - name: Salva i tasselli nel repository
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
-        continue-on-error: true
         run: |
           if [ -f tiles-data/tiles.json ]; then
             git config user.name "github-actions"
