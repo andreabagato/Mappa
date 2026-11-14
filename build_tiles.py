@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepara i tasselli batimetrici a tre livelli (base, medio, fine), a lotti.
 
+Versione 8: FORCE_FINE=true scarica i tasselli fini in tutta l'area scelta (per piccoli pezzi mancanti, es. un porto).
 Versione 7: se ERDDAP rifiuta un tassello, lo script aspetta (1 e 2 minuti) e riprova prima di darlo per fallito.
 Versione 6: la costa si chiede prima dove c'e' terra nei tasselli fini; se Overpass non risponde fa pause e riprova.
 Versione 5: la costa si chiede a Overpass in 4 richieste piu' leggere per quadrato (timeout 90 s, un tentativo per server).
@@ -54,7 +55,7 @@ COAST_SPLIT = 2   # ogni quadrato di 1 grado si chiede a Overpass in 2x2 richies
 PAUSE = 3         # secondi tra una richiesta e l'altra a ERDDAP
 COAST_PAUSE = 4   # secondi tra una richiesta e l'altra a Overpass
 BASE = "https://erddap.emodnet.eu/erddap/griddap/bathymetry_dtm_2024.csv"
-UA = "mappa-isobate-prototipo/0.7 (progetto personale; GitHub Actions)"
+UA = "mappa-isobate-prototipo/0.8 (progetto personale; GitHub Actions)"
 OVERPASS = ["https://overpass-api.de/api/interpreter",
             "https://overpass.private.coffee/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter",
@@ -140,6 +141,8 @@ def fetch_tile(level, ti, tj, L0, M0):
     return out
 
 
+FORCE_FINE = os.environ.get("FORCE_FINE", "").strip().lower() in ("1", "true", "si", "yes")   # tasselli fini in TUTTA l'area
+FORCE_FINE_MAX = 400   # limite di sicurezza: oltre questo numero di tasselli fini forzati ci si ferma
 PATIENT_ROUNDS = 3     # tentativi "pazienti" per ogni tassello (ERDDAP a volte rifiuta le connessioni per un po')
 PATIENT_WAIT = 60      # secondi di attesa dopo il primo giro, raddoppiano al secondo
 
@@ -383,6 +386,13 @@ def main():
             time.sleep(PAUSE)
 
     # --- F: fine ---
+    if FORCE_FINE:
+        forced = {(ti, tj) for ti in tile_range("F", B["lat_min"], B["lat_max"], L0)
+                  for tj in tile_range("F", B["lon_min"], B["lon_max"], M0)}
+        if len(forced) > FORCE_FINE_MAX:
+            raise SystemExit(f"Con 'tasselli fini ovunque' l'area contiene {len(forced)} tasselli (massimo {FORCE_FINE_MAX}): usare un'area piu' piccola.")
+        print(f"Tasselli fini forzati nell'area: {len(forced)}", flush=True)
+        fine_wanted |= forced
     fine = sorted(fine_wanted)[:MAX_FINE]
     if len(fine_wanted) > MAX_FINE:
         notes.append(f"troppi tasselli fini ({len(fine_wanted)}): considerati solo {MAX_FINE}")
