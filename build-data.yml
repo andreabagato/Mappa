@@ -1,0 +1,97 @@
+name: Costruisci dati e pubblica
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      prepara_tasselli:
+        description: "Prepara i tasselli (lungo: da 20 minuti a qualche ora)"
+        type: boolean
+        default: false
+      area:
+        description: "Area del lotto: lat_min,lat_max,lon_min,lon_max (es. 39.0,41.3,9.5,15.8)"
+        type: string
+        default: "39.0,41.3,9.5,15.8"
+      fini_ovunque:
+        description: "Tasselli fini in TUTTA l'area (solo per piccole aree, es. un porto; massimo 400 tasselli)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scarica i file del repository
+        uses: actions/checkout@v4
+
+      - name: Parti dai dati piu' recenti (solo se si preparano i tasselli)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Installa Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepara la cartella del sito
+        run: mkdir -p site
+
+      - name: Prepara i tasselli (solo se richiesto)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
+        continue-on-error: true
+        env:
+          BBOX: ${{ inputs.area }}
+          FORCE_FINE: ${{ inputs.fini_ovunque }}
+        run: python build_tiles.py
+
+      - name: Salva i tasselli nel repository
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prepara_tasselli }}
+        run: |
+          if [ -f tiles-data/tiles.json ]; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add tiles-data
+            git commit -m "Aggiorna i tasselli" || echo "Nessun cambiamento"
+            git pull --rebase origin main
+            git push
+          else
+            echo "Nessun tassello da salvare"
+          fi
+
+      - name: Aggiungi la mappa e i tasselli al sito
+        run: |
+          cp tiles.html site/index.html
+          if [ -d tiles-data ]; then cp -r tiles-data site/data; fi
+          mkdir -p site/tiles
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=../"><a href="../">Vai alla mappa</a>' > site/tiles/index.html
+
+      - name: Configura Pages
+        uses: actions/configure-pages@v5
+
+      - name: Impacchetta il sito
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Pubblica su GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
