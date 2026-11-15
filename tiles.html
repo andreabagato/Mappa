@@ -343,7 +343,7 @@ function probe(la,lo){
  return res||{none:true,land:land};}
 map.on('click',function(e){
  if(!T)return;var p=probe(e.latlng.lat,e.latlng.lng),txt='Nessun dato qui';
- if(p&&!p.none)txt=p.land===true?'Terraferma':(p.d>0?'Profondità stimata: <b>'+p.d.toFixed(1)+' m</b><br>cella ~'+Math.round(p.s*104)+' m, riferita a LAT':(p.f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+p.f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
+ if(p&&!p.none)txt=p.land===true?('Terraferma secondo la costa OSM'+(p.d>0?'.<br>Ma qui EMODnet ha un dato di acqua: <b>'+p.d.toFixed(1)+' m</b> (cella ~'+Math.round(p.s*104)+' m)':'')):(p.d>0?'Profondità stimata: <b>'+p.d.toFixed(1)+' m</b><br>cella ~'+Math.round(p.s*104)+' m, riferita a LAT':(p.f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+p.f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
  L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);});
 
 // --- mirino con profondita' al centro ---
@@ -353,7 +353,7 @@ map.getContainer().appendChild(xhEl);
 var xht=document.getElementById('xht'),xhTimer=0;
 function xhText(p){
  if(!p||p.none)return 'Nessun dato<small>in questo punto</small>';
- if(p.land===true)return 'Terraferma';
+ if(p.land===true)return p.d>0?'Terra (OSM)<small>ma EMODnet: '+p.d.toFixed(1)+' m</small>':'Terraferma';
  if(p.d>0)return p.d.toFixed(p.d<10?1:0)+' m<small>cella ~'+Math.round(p.s*104)+' m</small>';
  if(p.f>0)return '≈ '+Math.round(p.f)+' m<small>ipotizzata, poco affidabile</small>';
  return 'Terraferma o dato assente';}
