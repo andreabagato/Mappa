@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Isobate – test a livelli di dettaglio</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#08414f">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
  *{box-sizing:border-box} html,body{height:100%;margin:0}
@@ -22,6 +26,10 @@
  #xh svg{position:absolute;left:-14px;top:-14px}
  #xht{position:absolute;left:0;top:20px;transform:translateX(-50%);white-space:nowrap;background:rgba(8,40,60,.82);color:#fff;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;text-align:center;line-height:1.25}
  #xht small{display:block;font-weight:400;font-size:11px;opacity:.85}
+ #gpsb{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#0b5d73}
+ #gpsb.on{background:#e3eefc;color:#1a73e8} #gpsb.fol{background:#1a73e8;color:#fff}
+ #gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:none;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:13px;line-height:1.3}
+ #gpsi small{display:block;font-weight:400;font-size:11px;opacity:.85}
  @media(max-width:760px){main{flex-direction:column-reverse} aside{width:100%;height:42%}}
 </style>
 </head>
@@ -369,11 +377,60 @@ document.getElementById('redraw').onclick=function(){saveLv();for(var k in store
 document.getElementById('bands').onchange=document.getElementById('lines').onchange=document.getElementById('dbg').onchange=render;
 document.getElementById('op').oninput=function(e){map.getPane('bands').style.opacity=e.target.value/100;};
 
+// --- GPS: posizione in tempo reale ---
+var gpsR=L.svg({pane:(function(){var p=map.createPane('gps');p.style.zIndex=660;return 'gps';})()}).addTo(map);
+var gps={watch:null,follow:false,first:true,dot:null,acc:null,last:null,lock:null,btn:null};
+var gpsInfo=document.createElement('div');gpsInfo.id='gpsi';map.getContainer().appendChild(gpsInfo);
+var GpsCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
+ var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d);
+ a.href='#';a.id='gpsb';a.title='La mia posizione';a.setAttribute('role','button');a.setAttribute('aria-label','La mia posizione');
+ a.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>';
+ L.DomEvent.disableClickPropagation(d);
+ L.DomEvent.on(a,'click',function(e){L.DomEvent.preventDefault(e);gpsTap();});
+ gps.btn=a;return d;}});
+map.addControl(new GpsCtl());
+function gpsUI(){if(!gps.btn)return;gps.btn.className=gps.watch===null?'':(gps.follow?'fol':'on');}
+function gpsMsg(h){gpsInfo.innerHTML=h;gpsInfo.style.display=h?'block':'none';}
+function gpsLock(){try{if(navigator.wakeLock&&gps.watch!==null)navigator.wakeLock.request('screen').then(function(l){gps.lock=l;l.addEventListener('release',function(){gps.lock=null;});}).catch(function(){});}catch(e){}}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&gps.watch!==null&&!gps.lock)gpsLock();});
+function gpsOk(p){
+ var c=p.coords,ll=L.latLng(c.latitude,c.longitude),ac=c.accuracy||0;gps.last=ll;
+ if(!gps.dot){
+  gps.acc=L.circle(ll,{radius:ac,renderer:gpsR,interactive:false,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:.12}).addTo(map);
+  gps.dot=L.circleMarker(ll,{radius:8,renderer:gpsR,interactive:false,color:'#fff',weight:3,fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
+ }else{gps.dot.setLatLng(ll);gps.acc.setLatLng(ll);gps.acc.setRadius(ac);}
+ if(gps.first){gps.first=false;map.setView(ll,Math.max(map.getZoom(),14));}
+ else if(gps.follow){map.panTo(ll);}
+ var pr=probe(c.latitude,c.longitude);
+ gpsMsg('<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));
+}
+function gpsErr(e){
+ if(e&&e.code===1){gpsStop();gpsMsg('Permesso di posizione negato.<small>Attivalo nelle impostazioni del sito in Chrome.</small>');setTimeout(function(){if(gps.watch===null)gpsMsg('');},6000);return;}
+ gpsMsg(e&&e.code===3?'Nessun segnale GPS per ora, riprovo…':'Posizione non disponibile (segnale GPS debole?)');}
+function gpsStart(){
+ gps.first=true;gps.follow=true;gpsMsg('Cerco la posizione…');
+ gps.watch=navigator.geolocation.watchPosition(gpsOk,gpsErr,{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+ gpsLock();gpsUI();}
+function gpsStop(){
+ if(gps.watch!==null){navigator.geolocation.clearWatch(gps.watch);gps.watch=null;}
+ if(gps.dot){map.removeLayer(gps.dot);map.removeLayer(gps.acc);gps.dot=gps.acc=null;}
+ gps.last=null;gps.follow=false;
+ try{if(gps.lock)gps.lock.release();}catch(e){} gps.lock=null;
+ gpsMsg('');gpsUI();}
+function gpsTap(){
+ if(!navigator.geolocation){gpsMsg('Posizione non disponibile su questo browser.');return;}
+ if(gps.watch===null){gpsStart();return;}
+ if(!gps.follow){gps.follow=true;if(gps.last)map.setView(gps.last,Math.max(map.getZoom(),14));gpsUI();return;}
+ gpsStop();}
+map.on('dragstart',function(){if(gps.watch!==null&&gps.follow){gps.follow=false;gpsUI();}});
+// --- fine GPS ---
+
 fetch('data/tiles.json',{cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(t){
  T=t;['C','M','F'].forEach(function(L){avail[L]={};(t.levels[L]||[]).forEach(function(k){avail[L][k]=1;});});
  (t.coast||[]).forEach(function(k){coastAvail[k]=1;});update();
 }).catch(function(){say('Dati dei tasselli non ancora preparati. Avvia il procedimento con "Prepara tasselli" (vedi istruzioni).');});
 })();
+try{if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(function(){});}catch(e){}
 </script>
 </body>
 </html>
