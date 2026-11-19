@@ -73,6 +73,9 @@ jobs:
       - name: Aggiungi la mappa e i tasselli al sito
         run: |
           cp tiles.html site/index.html
+          for f in manifest.webmanifest sw.js icon-192.png icon-512.png; do
+            if [ -f "$f" ]; then cp "$f" "site/$f"; else echo "Manca $f"; fi
+          done
           if [ -d tiles-data ]; then cp -r tiles-data site/data; fi
           mkdir -p site/tiles
           printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=../"><a href="../">Vai alla mappa</a>' > site/tiles/index.html
@@ -95,4 +98,3 @@ jobs:
       - name: Pubblica su GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        
