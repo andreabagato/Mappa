@@ -28,8 +28,10 @@
  #xht small{display:block;font-weight:400;font-size:11px;opacity:.85}
  #gpsb{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#0b5d73}
  #gpsb.on{background:#e3eefc;color:#1a73e8} #gpsb.fol{background:#1a73e8;color:#fff}
- #gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:none;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:13px;line-height:1.3}
+ #gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:auto;cursor:pointer;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:13px;line-height:1.3}
  #gpsi small{display:block;font-weight:400;font-size:11px;opacity:.85}
+ #gpsv{font-size:22px;font-weight:700;line-height:1.2;margin-bottom:2px} #gpsv small{display:inline;font-size:12px;font-weight:400}
+ .gpsa{background:none;border:0} .gpsai{width:34px;height:34px;transform-origin:50% 50%}
  @media(max-width:760px){main{flex-direction:column-reverse} aside{width:100%;height:42%}}
 </style>
 </head>
@@ -379,8 +381,12 @@ document.getElementById('op').oninput=function(e){map.getPane('bands').style.opa
 
 // --- GPS: posizione in tempo reale ---
 var gpsR=L.svg({pane:(function(){var p=map.createPane('gps');p.style.zIndex=660;return 'gps';})()}).addTo(map);
-var gps={watch:null,follow:false,first:true,dot:null,acc:null,last:null,lock:null,btn:null};
+var gps={watch:null,follow:false,first:true,dot:null,acc:null,last:null,lock:null,btn:null,c:null,arrow:null,shaft:null,unit:'kmh'};
+map.createPane('gpsm').style.zIndex=670;
+try{if(localStorage.getItem('isobate_unit')==='kn')gps.unit='kn';}catch(e){}
 var gpsInfo=document.createElement('div');gpsInfo.id='gpsi';map.getContainer().appendChild(gpsInfo);
+L.DomEvent.disableClickPropagation(gpsInfo);
+L.DomEvent.on(gpsInfo,'click',function(){if(!gps.c)return;gps.unit=gps.unit==='kn'?'kmh':'kn';try{localStorage.setItem('isobate_unit',gps.unit);}catch(e){}gpsRender();});
 var GpsCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
  var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d);
  a.href='#';a.id='gpsb';a.title='La mia posizione';a.setAttribute('role','button');a.setAttribute('aria-label','La mia posizione');
@@ -393,16 +399,49 @@ function gpsUI(){if(!gps.btn)return;gps.btn.className=gps.watch===null?'':(gps.f
 function gpsMsg(h){gpsInfo.innerHTML=h;gpsInfo.style.display=h?'block':'none';}
 function gpsLock(){try{if(navigator.wakeLock&&gps.watch!==null)navigator.wakeLock.request('screen').then(function(l){gps.lock=l;l.addEventListener('release',function(){gps.lock=null;});}).catch(function(){});}catch(e){}}
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&gps.watch!==null&&!gps.lock)gpsLock();});
+var GPS_DIR=['N','NE','E','SE','S','SO','O','NO'];
+function gpsVec(c){
+ var v=(typeof c.speed==='number'&&isFinite(c.speed)&&c.speed>=0)?c.speed:null;
+ var h=(v!==null&&v>=0.7&&typeof c.heading==='number'&&isFinite(c.heading))?c.heading:null;
+ return {v:v,h:h};}
+function gpsAhead(ll,h,d){
+ var R=6371000,r=Math.PI/180,f1=ll.lat*r,l1=ll.lng*r,t=h*r,a=d/R;
+ var f2=Math.asin(Math.sin(f1)*Math.cos(a)+Math.cos(f1)*Math.sin(a)*Math.cos(t));
+ var l2=l1+Math.atan2(Math.sin(t)*Math.sin(a)*Math.cos(f1),Math.cos(a)-Math.sin(f1)*Math.sin(f2));
+ return L.latLng(f2/r,l2/r);}
+function gpsMove(ll,v,h){
+ if(h===null){
+  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
+  if(gps.shaft){map.removeLayer(gps.shaft);gps.shaft=null;}
+  gps.dot.setStyle({opacity:1,fillOpacity:1});return;}
+ gps.dot.setStyle({opacity:0,fillOpacity:0});
+ var end=gpsAhead(ll,h,Math.min(3000,Math.max(150,v*120)));
+ if(!gps.shaft)gps.shaft=L.polyline([ll,end],{renderer:gpsR,interactive:false,color:'#1a73e8',weight:3,opacity:.9,dashArray:'6 6'}).addTo(map);
+ else gps.shaft.setLatLngs([ll,end]);
+ if(!gps.arrow){
+  gps.arrow=L.marker(ll,{pane:'gpsm',interactive:false,keyboard:false,icon:L.divIcon({className:'gpsa',iconSize:[34,34],iconAnchor:[17,17],
+   html:'<div class="gpsai" style="transform:rotate('+h+'deg)"><svg width="34" height="34" viewBox="0 0 34 34"><path d="M17 3L28 29L17 23L6 29Z" fill="#1a73e8" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/></svg></div>'})}).addTo(map);
+ }else{
+  gps.arrow.setLatLng(ll);var el=gps.arrow.getElement();
+  if(el&&el.firstChild)el.firstChild.style.transform='rotate('+h+'deg)';
+ }}
+function gpsRender(){
+ var c=gps.c;if(!c)return;
+ var vh=gpsVec(c),ac=c.accuracy||0,u=gps.unit==='kn'?'nodi':'km/h',k=gps.unit==='kn'?1.943844:3.6;
+ var vs=vh.v===null?'—':(vh.v<0.3?0:vh.v*k).toFixed(1).replace('.',',');
+ var rot=vh.h!==null?' · '+Math.round(vh.h)+'° '+GPS_DIR[Math.round(vh.h/45)%8]:'';
+ var pr=probe(c.latitude,c.longitude);
+ gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div><b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));}
 function gpsOk(p){
- var c=p.coords,ll=L.latLng(c.latitude,c.longitude),ac=c.accuracy||0;gps.last=ll;
+ var c=p.coords,ll=L.latLng(c.latitude,c.longitude),ac=c.accuracy||0;gps.last=ll;gps.c=c;
  if(!gps.dot){
   gps.acc=L.circle(ll,{radius:ac,renderer:gpsR,interactive:false,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:.12}).addTo(map);
   gps.dot=L.circleMarker(ll,{radius:8,renderer:gpsR,interactive:false,color:'#fff',weight:3,fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
  }else{gps.dot.setLatLng(ll);gps.acc.setLatLng(ll);gps.acc.setRadius(ac);}
+ var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);
  if(gps.first){gps.first=false;map.setView(ll,Math.max(map.getZoom(),14));}
  else if(gps.follow){map.panTo(ll);}
- var pr=probe(c.latitude,c.longitude);
- gpsMsg('<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));
+ gpsRender();
 }
 function gpsErr(e){
  if(e&&e.code===1){gpsStop();gpsMsg('Permesso di posizione negato.<small>Attivalo nelle impostazioni del sito in Chrome.</small>');setTimeout(function(){if(gps.watch===null)gpsMsg('');},6000);return;}
@@ -414,6 +453,9 @@ function gpsStart(){
 function gpsStop(){
  if(gps.watch!==null){navigator.geolocation.clearWatch(gps.watch);gps.watch=null;}
  if(gps.dot){map.removeLayer(gps.dot);map.removeLayer(gps.acc);gps.dot=gps.acc=null;}
+ if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
+ if(gps.shaft){map.removeLayer(gps.shaft);gps.shaft=null;}
+ gps.c=null;
  gps.last=null;gps.follow=false;
  try{if(gps.lock)gps.lock.release();}catch(e){} gps.lock=null;
  gpsMsg('');gpsUI();}
