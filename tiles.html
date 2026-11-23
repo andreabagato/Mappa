@@ -33,7 +33,11 @@
  #gpsv{font-size:22px;font-weight:700;line-height:1.2;margin-bottom:2px} #gpsv small{display:inline;font-size:12px;font-weight:400}
  .gpsa{background:none;border:0} .gpsai{width:34px;height:34px;transform-origin:50% 50%}
  #wpb1,#wpb2{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#e8590c} #wpb2{color:#0b5d73}
- .wpic{background:none;border:0} .wpi{position:relative} .wpn{display:none;position:absolute;left:22px;top:2px;white-space:nowrap;font-size:12px;font-weight:700;color:#08414f;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 3px #fff} .wpl .wpn{display:block}
+ .wpic{background:none;border:0} .wpi{position:relative;width:36px;height:36px} .wpi svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
+ .wpn{position:absolute;top:39px;left:50%;transform:translateX(-50%);display:block;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,.92);color:#0b2a3a;border-radius:8px;padding:1px 7px;font-size:12px;font-weight:700;line-height:1.35;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+ .wpig{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}
+ .wpib{margin:0!important;padding:5px 2px!important;background:#fff!important;color:#123!important;border:2px solid #cfdde3!important;border-radius:8px!important;font-size:10px!important;line-height:1.15!important;font-weight:600!important}
+ .wpib.sel{border-color:#1a73e8!important;background:#e3eefc!important} .wpib svg{display:block;margin:0 auto 3px} .wpib span{display:block}
  .wppop button{margin-top:8px;padding:6px 12px;font-size:13px}
  #wpt{position:absolute;top:10px;left:50px;right:50px;z-index:900;display:none;background:rgba(8,40,60,.95);color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.35}
  #wpt button{margin:4px 8px 0 0;padding:4px 10px;font-size:12px;background:#fff;color:#08414f}
@@ -380,7 +384,7 @@ var xht=document.getElementById('xht'),xhTimer=0;
 function xhText(p){
  if(!p||p.none)return 'Nessun dato<small>in questo punto</small>';
  if(p.land===true)return 'Terraferma';
- if(p.d>0)return p.d.toFixed(p.d<10?1:0)+' m<small>cella ~'+Math.round(p.s*104)+' m</small>';
+ if(p.d>0)return p.d.toFixed(p.d<10?1:0)+' m';
  if(p.f>0)return '≈ '+Math.round(p.f)+' m<small>ipotizzata, poco affidabile</small>';
  return 'Terraferma o dato assente';}
 function updXh(){xhTimer=0;if(!document.getElementById('xhc').checked)return;var c=map.getCenter();xht.innerHTML=xhText(probe(c.lat,c.lng));}
@@ -515,7 +519,7 @@ function wpDepthTxt(w){var x=wpDepthAt(w.lat,w.lon);if(!x&&w.d>0)x={d:w.d,est:!!
 function wpNextName(){var m=0;wp.forEach(function(w){var r=/^Punto (\d+)$/.exec(w.name||'');if(r)m=Math.max(m,+r[1]);});return 'Punto '+(m+1);}
 function wpNew(lat,lon,src,name,note,t){
  var x=wpDepthAt(lat,lon);
- return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name:name||wpNextName(),note:note||'',lat:lat,lon:lon,d:x?+x.d.toFixed(1):null,est:x?x.est:false,t:t||Date.now(),src:src||'map'};}
+ return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name:name||wpNextName(),note:note||'',lat:lat,lon:lon,d:x?+x.d.toFixed(1):null,est:x?x.est:false,t:t||Date.now(),src:src||'map',icon:wpDefaultIcon()};}
 
 // avviso a comparsa
 var wpT=document.createElement('div');wpT.id='wpt';map.getContainer().appendChild(wpT);L.DomEvent.disableClickPropagation(wpT);var wpTT=0;
@@ -528,7 +532,55 @@ function wpToast(html,w,ms){
 
 // segnaposto sulla mappa
 map.createPane('wp').style.zIndex=655;
-function wpIcon(w){return L.divIcon({className:'wpic',iconSize:[26,34],iconAnchor:[5,32],html:'<div class="wpi"><svg width="26" height="34" viewBox="0 0 26 34"><path d="M5 32V3" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M5 3H23L17 9.5L23 16H5Z" fill="#fff"/><path d="M5 32V3" stroke="#e8590c" stroke-width="2.4" stroke-linecap="round"/><path d="M5 4H21L16 9.5L21 15H5Z" fill="#e8590c"/></svg><span class="wpn">'+wpEsc(w.name)+'</span></div>'});}
+// icone dei waypoint: [id, nome, forma(c cerchio, s quadrato, d rombo, h esagono), colore, colore simbolo, simbolo, bordo]
+var WP_ICONS=[
+ ['flag','Bandiera','c','#ff6a00','#ffffff','<path d="M6 21V3" stroke="{G}" stroke-width="2.4" stroke-linecap="round"/><path d="M7 4H20L16 9L20 14H7Z" fill="{G}"/>'],
+ ['star','Punto top','c','#ffd500','#12263a','<path d="M12 2.5L14.9 8.8L21.7 9.5L16.6 14.1L18.1 20.8L12 17.3L5.9 20.8L7.4 14.1L2.3 9.5L9.1 8.8Z" fill="{G}"/>'],
+ ['fish','Pesca','c','#12c43b','#ffffff','<path d="M2.5 12C5.5 6 13.5 6 17.5 12C13.5 18 5.5 18 2.5 12Z" fill="{G}"/><path d="M17 12L22 7.5V16.5Z" fill="{G}"/><circle cx="7.5" cy="11" r="1.3" fill="{B}"/>'],
+ ['pot','Nassa / rete','c','#a6e000','#12263a','<rect x="3.5" y="6.5" width="17" height="11" rx="3" fill="none" stroke="{G}" stroke-width="2.2"/><path d="M9 6.5V17.5M15 6.5V17.5M3.5 12H20.5" stroke="{G}" stroke-width="1.8"/>'],
+ ['dive','Immersione','c','#00b7ff','#ffffff','<rect x="3.5" y="5" width="17" height="14" fill="#e11d48" stroke="#ffffff" stroke-width="1.6"/><path d="M3.5 19L20.5 5" stroke="#ffffff" stroke-width="3.2"/>'],
+ ['anchor','Ancoraggio','c','#1f5cff','#ffffff','<circle cx="12" cy="5" r="2.4" fill="none" stroke="{G}" stroke-width="2.2"/><path d="M12 7.4V21M7.5 11H16.5M4 14.5C4.5 18.5 8 21 12 21C16 21 19.5 18.5 20 14.5" fill="none" stroke="{G}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+ ['buoy','Boa','c','#ff2d95','#ffffff','<circle cx="12" cy="4.5" r="2" fill="{G}"/><path d="M12 6V9" stroke="{G}" stroke-width="2"/><path d="M8.5 21L7.5 12.5C7.5 10.5 16.5 10.5 16.5 12.5L15.5 21Z" fill="{G}"/><path d="M7.8 15.5H16.2" stroke="{B}" stroke-width="2"/>'],
+ ['mooring','Ormeggio','c','#8a2be2','#ffffff','<circle cx="12" cy="9" r="5.2" fill="none" stroke="{G}" stroke-width="2.4"/><path d="M12 14.2V21M8 21H16" stroke="{G}" stroke-width="2.6" stroke-linecap="round"/>'],
+ ['port','Porto / marina','s','#00b5ad','#ffffff','<path d="M2.5 15.5H21.5L18.5 20H5.5Z" fill="{G}"/><path d="M11.2 3.5V14H4.5Z" fill="{G}"/><path d="M12.8 6V14H19Z" fill="{G}"/>'],
+ ['fuel','Carburante','s','#e11d48','#ffffff','<rect x="4.5" y="3.5" width="9.5" height="17" rx="1.6" fill="{G}"/><rect x="6.5" y="6" width="5.5" height="4" fill="{B}"/><path d="M14 8H16.5C18 8 18.5 9 18.5 10V16C18.5 17.5 20.5 17.5 20.5 16V8.5L18.5 6.5" fill="none" stroke="{G}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'],
+ ['ramp','Scivolo / alaggio','s','#5b6bff','#ffffff','<path d="M3 7L21 17.5H3Z" fill="{G}"/><path d="M3 21Q6 19 9 21T15 21T21 21" fill="none" stroke="{G}" stroke-width="1.8" stroke-linecap="round"/>'],
+ ['lighthouse','Faro','s','#ffb000','#12263a','<path d="M9 21L10.4 9H13.6L15 21Z" fill="{G}"/><rect x="9.6" y="5.5" width="4.8" height="3.5" fill="{G}"/><path d="M12 2V4.2M5 6L7.5 7M19 6L16.5 7" stroke="{G}" stroke-width="1.8" stroke-linecap="round"/><path d="M8 21.5H16" stroke="{G}" stroke-width="2"/><path d="M9.8 14.5H14.2" stroke="{B}" stroke-width="1.6"/>'],
+ ['home','Casa / base','s','#ff5a5f','#ffffff','<path d="M2.5 12L12 3.5L21.5 12H19V20H14.5V14.5H9.5V20H5V12Z" fill="{G}"/>'],
+ ['water','Acqua','s','#06b6d4','#ffffff','<path d="M12 2.5C12 2.5 5.5 10 5.5 14.5C5.5 18.1 8.4 21 12 21C15.6 21 18.5 18.1 18.5 14.5C18.5 10 12 2.5 12 2.5Z" fill="{G}"/><path d="M9 15C9 16.8 10.2 18 12 18" fill="none" stroke="{B}" stroke-width="1.6" stroke-linecap="round"/>'],
+ ['danger','Pericolo','d','#ff1f1f','#ffffff','<rect x="10.7" y="3.5" width="2.6" height="11" rx="1.3" fill="{G}"/><circle cx="12" cy="19" r="1.9" fill="{G}"/>'],
+ ['rock','Scoglio','d','#d946ef','#ffffff','<path d="M2 20L8 8.5L11.5 14L15.5 5.5L22 20Z" fill="{G}"/>'],
+ ['wreck','Relitto','d','#7c3aed','#ffffff','<path d="M3 14.5L21 10.5L18.5 19H6Z" fill="{G}"/><path d="M12.5 12.5V4M12.5 4L17 6.5" fill="none" stroke="{G}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'],
+ ['shoal','Secca','d','#00e5ff','#12263a','<path d="M2.5 8.5Q5.5 4.5 8.5 8.5T14.5 8.5T20.5 8.5M2.5 15Q5.5 11 8.5 15T14.5 15T20.5 15" fill="none" stroke="{G}" stroke-width="2.2" stroke-linecap="round"/><circle cx="6" cy="20" r="1.3" fill="{G}"/><circle cx="12" cy="20" r="1.3" fill="{G}"/><circle cx="18" cy="20" r="1.3" fill="{G}"/>'],
+ ['mob','Uomo in mare','h','#ffffff','#e11d48','<text x="12" y="16" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="900" font-size="10.5" fill="{G}">MOB</text>','#e11d48'],
+ ['current','Corrente','c','#00d09c','#12263a','<path d="M3 8.5H17M13 4.5L17 8.5L13 12.5M21 15.5H7M11 11.5L7 15.5L11 19.5" fill="none" stroke="{G}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>']
+];
+var WP_ICON_MAP={};WP_ICONS.forEach(function(i){WP_ICON_MAP[i[0]]=i;});
+function wpIconSvg(id,sz){
+ var ic=WP_ICON_MAP[id]||WP_ICON_MAP.flag,sh=ic[2],bc=ic[3],gc=ic[4],st=ic[6]||'#ffffff',
+  s=sh==='c'?'<circle cx="18" cy="18" r="15" ':sh==='s'?'<rect x="3.5" y="3.5" width="29" height="29" rx="7" ':sh==='d'?'<path d="M18 1.8L34.2 18L18 34.2L1.8 18Z" ':'<path d="M18 2L31 9.5V26.5L18 34L5 26.5V9.5Z" ',
+  sc=sh==='d'?0.72:(sh==='h'?0.8:0.9),
+  g=ic[5].replace(/\{G\}/g,gc).replace(/\{B\}/g,bc);
+ return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">'+s+'fill="'+bc+'" stroke="'+st+'" stroke-width="2.6" stroke-linejoin="round"/><g transform="translate(18 18) scale('+sc+') translate(-12 -12)">'+g+'</g></svg>';}
+function wpIconFrom(s){s=String(s||'').toLowerCase().trim();return WP_ICON_MAP[s]?s:null;}
+function wpDefaultIcon(){try{var i=localStorage.getItem('isobate_wpicon');if(i&&WP_ICON_MAP[i])return i;}catch(e){}return 'flag';}
+function wpIconGrid(cur,onPick){
+ var g=wpH('div',{class:'wpig'}),btns={};
+ WP_ICONS.forEach(function(ic){
+  var b=wpH('button',{class:'wpib'+(ic[0]===cur?' sel':''),type:'button','aria-label':ic[1]});
+  b.innerHTML=wpIconSvg(ic[0],34)+'<span>'+ic[1]+'</span>';
+  b.addEventListener('click',function(){for(var k in btns)btns[k].className='wpib';b.className='wpib sel';onPick(ic[0]);});
+  btns[ic[0]]=b;g.appendChild(b);});
+ return g;}
+function wpHead(w,sz){var ic=wpH('span',{style:'flex:none;display:inline-block;line-height:0'});ic.innerHTML=wpIconSvg(w.icon,sz);return wpH('div',{style:'display:flex;align-items:center;gap:8px'},[ic,wpH('b',{text:w.name})]);}
+function wpDefIconBox(){
+ var box=wpH('div',{style:'margin:8px 0'}),holder=wpH('div'),prev=wpH('span',{style:'display:inline-block;vertical-align:middle;margin-right:8px;line-height:0'});
+ function ref(){prev.innerHTML=wpIconSvg(wpDefaultIcon(),28);}
+ var b=wpH('button',{text:'Icona dei nuovi punti',on:{click:function(){
+  holder.innerHTML='';if(holder.open){holder.open=false;return;}holder.open=true;
+  holder.appendChild(wpIconGrid(wpDefaultIcon(),function(i){try{localStorage.setItem('isobate_wpicon',i);}catch(e){}ref();holder.innerHTML='';holder.open=false;}));}}});
+ ref();box.appendChild(prev);box.appendChild(b);box.appendChild(holder);return box;}
+function wpIcon(w){return L.divIcon({className:'wpic',iconSize:[36,36],iconAnchor:[18,18],html:'<div class="wpi">'+wpIconSvg(w.icon,36)+'<span class="wpn">'+wpEsc(w.name)+'</span></div>'});}
 function wpUndraw(id){if(wpLayer[id]){map.removeLayer(wpLayer[id]);delete wpLayer[id];}}
 function wpDraw(w){
  wpUndraw(w.id);if(!wpShow)return;
@@ -537,7 +589,7 @@ function wpDraw(w){
 function wpZoom(){var c=map.getContainer();if(map.getZoom()>=11)c.classList.add('wpl');else c.classList.remove('wpl');}
 function wpPopup(id){
  var w=wpGet(id);if(!w)return;
- var d=wpH('div',{class:'wppop'},[wpH('b',{text:w.name}),wpH('div',{text:wpDepthTxt(w)}),wpH('div',{text:wpFmtDate(w.t)})]);
+ var d=wpH('div',{class:'wppop'},[wpHead(w,30),wpH('div',{text:wpDepthTxt(w)}),wpH('div',{text:wpFmtDate(w.t)})]);
  if(gps.last){var a={lat:gps.last.lat,lng:gps.last.lng},b={lat:w.lat,lng:w.lon};d.appendChild(wpH('div',{text:'da te: '+wpFmtDist(wpDist(a,b))+' · '+wpDir(wpBrg(a,b))}));}
  if(w.note)d.appendChild(wpH('div',{text:w.note,style:'font-style:italic;margin-top:4px'}));
  d.appendChild(wpH('button',{text:'Vai',on:{click:function(){map.closePopup();wpGo(id);}}}));
@@ -584,7 +636,7 @@ function wpGoText(){
 function wpXe(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c];});}
 function wpGpx(){
  var x='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Isobate" xmlns="http://www.topografix.com/GPX/1/1">\n';
- wp.forEach(function(w){x+='<wpt lat="'+w.lat.toFixed(6)+'" lon="'+w.lon.toFixed(6)+'">\n <time>'+new Date(w.t||Date.now()).toISOString()+'</time>\n <name>'+wpXe(w.name)+'</name>\n'+(w.note?' <desc>'+wpXe(w.note)+'</desc>\n':'')+'</wpt>\n';});
+ wp.forEach(function(w){x+='<wpt lat="'+w.lat.toFixed(6)+'" lon="'+w.lon.toFixed(6)+'">\n <time>'+new Date(w.t||Date.now()).toISOString()+'</time>\n <name>'+wpXe(w.name)+'</name>\n'+(w.note?' <desc>'+wpXe(w.note)+'</desc>\n':'')+' <sym>'+wpXe(w.icon||'flag')+'</sym>\n</wpt>\n';});
  return x+'</gpx>\n';}
 function wpXtag(b,t){
  var m=new RegExp('<'+t+'(?:\\s[^>]*)?>([\\s\\S]*?)</'+t+'>','i').exec(b);if(!m)return '';
@@ -596,14 +648,14 @@ function wpParseGpx(txt){
   var la=/\blat\s*=\s*["']([^"']+)["']/i.exec(m[1]),lo=/\blon\s*=\s*["']([^"']+)["']/i.exec(m[1]);if(!la||!lo)continue;
   var lat=parseFloat(la[1]),lon=parseFloat(lo[1]);if(!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
   var b=m[3]||'',tm=wpXtag(b,'time'),t=tm?Date.parse(tm):NaN;
-  out.push({name:wpXtag(b,'name'),note:wpXtag(b,'desc')||wpXtag(b,'cmt'),lat:lat,lon:lon,t:isFinite(t)?t:Date.now()});}
+  out.push({name:wpXtag(b,'name'),note:wpXtag(b,'desc')||wpXtag(b,'cmt'),lat:lat,lon:lon,t:isFinite(t)?t:Date.now(),icon:wpIconFrom(wpXtag(b,'sym'))});}
  return out;}
 function wpParseAny(txt){
  var s=String(txt).replace(/^\uFEFF/,'').trim();
  if(s.charAt(0)==='<')return wpParseGpx(s);
  if(s.charAt(0)==='['||s.charAt(0)==='{'){
   var j=JSON.parse(s);if(!Array.isArray(j))j=j.waypoints||j.points||[];
-  return j.filter(function(n){return n&&isFinite(n.lat)&&isFinite(n.lon)&&Math.abs(n.lat)<=90&&Math.abs(n.lon)<=180;}).map(function(n){return {name:String(n.name||''),note:String(n.note||n.desc||''),lat:+n.lat,lon:+n.lon,t:isFinite(n.t)?+n.t:Date.now()};});}
+  return j.filter(function(n){return n&&isFinite(n.lat)&&isFinite(n.lon)&&Math.abs(n.lat)<=90&&Math.abs(n.lon)<=180;}).map(function(n){return {name:String(n.name||''),note:String(n.note||n.desc||''),lat:+n.lat,lon:+n.lon,t:isFinite(n.t)?+n.t:Date.now(),icon:wpIconFrom(n.icon)};});}
  return [];}
 function wpImport(list){
  var add=0,skip=0,cap=0;
@@ -611,7 +663,7 @@ function wpImport(list){
   var nm=String(n.name||'').slice(0,80),dup=wp.some(function(w){return Math.abs(w.lat-n.lat)<1e-5&&Math.abs(w.lon-n.lon)<1e-5&&(!nm||nm===w.name);});
   if(dup){skip++;return;}
   if(wp.length>=2000){cap++;return;}
-  var w=wpNew(n.lat,n.lon,'import',nm,String(n.note||'').slice(0,500),n.t);wp.push(w);wpDraw(w);add++;});
+  var w=wpNew(n.lat,n.lon,'import',nm,String(n.note||'').slice(0,500),n.t);w.icon=n.icon||'flag';wp.push(w);wpDraw(w);add++;});
  wpSave();return {add:add,skip:skip,cap:cap};}
 function wpDownload(){
  if(!wp.length){wpToast('Nessun punto da esportare.');return;}
@@ -657,6 +709,7 @@ function wpList(){
  bd.appendChild(wpH('div',null,acts));bd.appendChild(inp);
  var last=0;try{last=+localStorage.getItem('isobate_lastexp')||0;}catch(e){}
  bd.appendChild(wpH('small',{style:'display:block;margin:6px 0;color:'+((wp.length&&!last)?'#b45309':'#456'),text:last?'Ultimo file salvato: '+wpFmtDate(last):(wp.length?'Non hai ancora salvato un file: i punti stanno solo in questo telefono. Esporta ogni tanto.':'I punti restano solo in questo telefono: esporta ogni tanto per averne una copia.')}));
+ bd.appendChild(wpDefIconBox());
  bd.appendChild(wpH('label',null,[wpH('input',{type:'checkbox',checked:wpShow,on:{change:function(e){wpShow=!!e.target.checked;try{localStorage.setItem('isobate_wpshow',wpShow?'1':'0');}catch(x){}wp.forEach(wpDraw);}}}),' Mostra i punti sulla mappa']));
  if(!wp.length){bd.appendChild(wpH('p',{text:'Nessun punto salvato. Con il GPS acceso usa la bandierina con il +, oppure tocca la mappa e scegli «Segna questo punto» (o tieni premuto sulla mappa).'}));return;}
  var rows=wp.map(function(w){var d=me?wpDist(me,{lat:w.lat,lng:w.lon}):null;return {w:w,d:d};});
@@ -664,7 +717,7 @@ function wpList(){
  rows.forEach(function(r){var w=r.w,info=[];
   if(me)info.push(wpFmtDist(r.d)+' · '+wpDir(wpBrg(me,{lat:w.lat,lng:w.lon})));
   info.push(wpDepthTxt(w));info.push(wpFmtDate(w.t));
-  var row=wpH('div',{class:'wprow'},[wpH('b',{text:w.name}),wpH('small',{text:info.join(' · ')})]);
+  var row=wpH('div',{class:'wprow'},[wpHead(w,32),wpH('small',{text:info.join(' · ')})]);
   if(w.note)row.appendChild(wpH('small',{text:w.note,style:'font-style:italic'}));
   row.appendChild(wpH('div',{class:'bt'},[
    wpH('button',{text:'Centra',on:{click:function(){wpCloseP();map.setView([w.lat,w.lon],Math.max(map.getZoom(),14));}}}),
@@ -676,13 +729,14 @@ function wpEdit(id){
  var bd=wpFrame('Modifica punto'),nm=wpH('input',{type:'text',maxlength:'80',value:w.name}),nt=wpH('textarea',{rows:'4',maxlength:'500',value:w.note||''});
  bd.appendChild(wpH('label',{style:'display:block'},['Nome',nm]));
  bd.appendChild(wpH('label',{style:'display:block;margin-top:8px'},['Nota',nt]));
+ var icon=w.icon||'flag';bd.appendChild(wpH('div',{style:'margin-top:10px;font-size:13px'},['Icona']));bd.appendChild(wpIconGrid(icon,function(i){icon=i;}));
  bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:w.lat.toFixed(5)+', '+w.lon.toFixed(5)+' · '+wpDepthTxt(w)+' · '+wpFmtDate(w.t)}));
  var del=wpH('button',{text:'Elimina',class:'wpd',style:'margin-left:6px'}),armed=false;
  del.addEventListener('click',function(){
   if(!armed){armed=true;del.textContent='Tocca ancora per eliminare';return;}
   wpDelete(id);wpCloseP();});
  bd.appendChild(wpH('div',null,[
-  wpH('button',{text:'Salva',on:{click:function(){w.name=(nm.value||'').trim().slice(0,80)||wpNextName();w.note=(nt.value||'').trim().slice(0,500);wpSave();wpDraw(w);if(gps.c)gpsRender();wpCloseP();}}}),
+  wpH('button',{text:'Salva',on:{click:function(){w.name=(nm.value||'').trim().slice(0,80)||wpNextName();w.note=(nt.value||'').trim().slice(0,500);w.icon=icon;wpSave();wpDraw(w);if(gps.c)gpsRender();wpCloseP();}}}),
   del,wpH('button',{text:'Annulla',style:'margin-left:6px;background:#6b7c85',on:{click:function(){wpCloseP();}}})]));}
 
 // pulsanti sulla mappa (sotto quello del GPS)
