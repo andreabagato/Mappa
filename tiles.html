@@ -32,6 +32,17 @@
  #gpsi small{display:block;font-weight:400;font-size:11px;opacity:.85}
  #gpsv{font-size:22px;font-weight:700;line-height:1.2;margin-bottom:2px} #gpsv small{display:inline;font-size:12px;font-weight:400}
  .gpsa{background:none;border:0} .gpsai{width:34px;height:34px;transform-origin:50% 50%}
+ #wpb1,#wpb2{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#e8590c} #wpb2{color:#0b5d73}
+ .wpic{background:none;border:0} .wpi{position:relative} .wpn{display:none;position:absolute;left:22px;top:2px;white-space:nowrap;font-size:12px;font-weight:700;color:#08414f;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 3px #fff} .wpl .wpn{display:block}
+ .wppop button{margin-top:8px;padding:6px 12px;font-size:13px}
+ #wpt{position:absolute;top:10px;left:50px;right:50px;z-index:900;display:none;background:rgba(8,40,60,.95);color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.35}
+ #wpt button{margin:4px 8px 0 0;padding:4px 10px;font-size:12px;background:#fff;color:#08414f}
+ #wpp{position:fixed;left:0;top:0;right:0;bottom:0;z-index:3000;background:#f7fafb;display:none;flex-direction:column}
+ #wpp .bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#08414f;color:#fff;font-weight:600}
+ #wpp .bar button{margin:0;background:#fff;color:#08414f} #wpp .bd{flex:1;overflow-y:auto;padding:12px 14px}
+ .wprow{border:1px solid #cfdde3;border-radius:8px;background:#fff;padding:8px 10px;margin:8px 0} .wprow small{display:block;color:#456}
+ .wprow .bt button{margin:6px 6px 0 0;padding:6px 12px;font-size:13px} .wpd{background:#c0392b}
+ .gpsg{font-size:15px;font-weight:600;margin:2px 0 4px;color:#ffb27a} .gpsx{display:inline-block;padding:2px 9px;margin-left:6px;background:rgba(255,255,255,.2);border-radius:4px;cursor:pointer}
  @media(max-width:760px){main{flex-direction:column-reverse} aside{width:100%;height:42%}}
 </style>
 </head>
@@ -354,7 +365,9 @@ function probe(la,lo){
 map.on('click',function(e){
  if(!T)return;var p=probe(e.latlng.lat,e.latlng.lng),txt='Nessun dato qui';
  if(p&&!p.none)txt=p.land===true?'Terraferma':(p.d>0?'Profondità stimata: <b>'+p.d.toFixed(1)+' m</b><br>cella ~'+Math.round(p.s*104)+' m, riferita a LAT':(p.f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+p.f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
- L.popup().setLatLng(e.latlng).setContent(txt).openOn(map);});
+ var box=document.createElement('div');box.innerHTML=txt;var bt=document.createElement('button');bt.textContent='📍 Segna questo punto';bt.style.cssText='display:block;margin-top:8px;padding:6px 12px;font-size:13px';
+ bt.addEventListener('click',function(){map.closePopup();wpAdd(e.latlng.lat,e.latlng.lng,'map');});box.appendChild(bt);
+ L.popup().setLatLng(e.latlng).setContent(box).openOn(map);});
 
 // --- mirino con profondita' al centro ---
 var xhEl=document.createElement('div');xhEl.id='xh';xhEl.style.display='none';
@@ -381,12 +394,12 @@ document.getElementById('op').oninput=function(e){map.getPane('bands').style.opa
 
 // --- GPS: posizione in tempo reale ---
 var gpsR=L.svg({pane:(function(){var p=map.createPane('gps');p.style.zIndex=660;return 'gps';})()}).addTo(map);
-var gps={watch:null,follow:false,first:true,dot:null,acc:null,last:null,lock:null,btn:null,c:null,arrow:null,shaft:null,unit:'kmh'};
+var gps={watch:null,follow:false,first:true,dot:null,acc:null,last:null,lock:null,btn:null,c:null,arrow:null,shaft:null,unit:'kmh',goto:null,gline:null,arrived:false};
 map.createPane('gpsm').style.zIndex=670;
 try{if(localStorage.getItem('isobate_unit')==='kn')gps.unit='kn';}catch(e){}
 var gpsInfo=document.createElement('div');gpsInfo.id='gpsi';map.getContainer().appendChild(gpsInfo);
 L.DomEvent.disableClickPropagation(gpsInfo);
-L.DomEvent.on(gpsInfo,'click',function(){if(!gps.c)return;gps.unit=gps.unit==='kn'?'kmh':'kn';try{localStorage.setItem('isobate_unit',gps.unit);}catch(e){}gpsRender();});
+L.DomEvent.on(gpsInfo,'click',function(ev){var t=ev&&ev.target;if(t&&t.getAttribute&&t.getAttribute('data-x')){gps.goto=null;gps.arrived=false;wpGoUpdate();if(gps.c)gpsRender();return;}if(!gps.c)return;gps.unit=gps.unit==='kn'?'kmh':'kn';try{localStorage.setItem('isobate_unit',gps.unit);}catch(e){}gpsRender();});
 var GpsCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
  var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d);
  a.href='#';a.id='gpsb';a.title='La mia posizione';a.setAttribute('role','button');a.setAttribute('aria-label','La mia posizione');
@@ -431,14 +444,14 @@ function gpsRender(){
  var vs=vh.v===null?'—':(vh.v<0.3?0:vh.v*k).toFixed(1).replace('.',',');
  var rot=vh.h!==null?' · '+Math.round(vh.h)+'° '+GPS_DIR[Math.round(vh.h/45)%8]:'';
  var pr=probe(c.latitude,c.longitude);
- gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div><b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));}
+ gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div>'+wpGoText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));}
 function gpsOk(p){
  var c=p.coords,ll=L.latLng(c.latitude,c.longitude),ac=c.accuracy||0;gps.last=ll;gps.c=c;
  if(!gps.dot){
   gps.acc=L.circle(ll,{radius:ac,renderer:gpsR,interactive:false,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:.12}).addTo(map);
   gps.dot=L.circleMarker(ll,{radius:8,renderer:gpsR,interactive:false,color:'#fff',weight:3,fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
  }else{gps.dot.setLatLng(ll);gps.acc.setLatLng(ll);gps.acc.setRadius(ac);}
- var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);
+ var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);wpGoUpdate();
  if(gps.first){gps.first=false;map.setView(ll,Math.max(map.getZoom(),14));}
  else if(gps.follow){map.panTo(ll);}
  gpsRender();
@@ -455,6 +468,7 @@ function gpsStop(){
  if(gps.dot){map.removeLayer(gps.dot);map.removeLayer(gps.acc);gps.dot=gps.acc=null;}
  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
  if(gps.shaft){map.removeLayer(gps.shaft);gps.shaft=null;}
+ if(gps.gline){map.removeLayer(gps.gline);gps.gline=null;}
  gps.c=null;
  gps.last=null;gps.follow=false;
  try{if(gps.lock)gps.lock.release();}catch(e){} gps.lock=null;
@@ -466,6 +480,225 @@ function gpsTap(){
  gpsStop();}
 map.on('dragstart',function(){if(gps.watch!==null&&gps.follow){gps.follow=false;gpsUI();}});
 // --- fine GPS ---
+// --- WAYPOINT ---
+var WP_KEY='isobate_wp',wp=[],wpShow=true,wpLayer={},wpOpen=false;
+function wpEsc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function wpPad(n){return (n<10?'0':'')+n;}
+function wpH(tag,at,kids){
+ var e=document.createElement(tag);
+ if(at)for(var k in at){var v=at[k];
+  if(k==='text')e.textContent=v;
+  else if(k==='class')e.className=v;
+  else if(k==='value')e.value=v;
+  else if(k==='checked')e.checked=v;
+  else if(k==='on'){for(var ev in v)e.addEventListener(ev,v[ev]);}
+  else e.setAttribute(k,v);}
+ (kids||[]).forEach(function(c){if(c)e.appendChild(typeof c==='string'?document.createTextNode(c):c);});
+ return e;}
+function wpLoad(){
+ try{var a=JSON.parse(localStorage.getItem(WP_KEY)||'[]');if(Array.isArray(a))wp=a.filter(function(w){return w&&isFinite(w.lat)&&isFinite(w.lon);});}catch(e){wp=[];}
+ try{wpShow=localStorage.getItem('isobate_wpshow')!=='0';}catch(e){}}
+function wpSave(){try{localStorage.setItem(WP_KEY,JSON.stringify(wp));return true;}catch(e){wpToast('Non riesco a salvare i punti (spazio pieno o salvataggio bloccato). Esporta subito il file GPX.');return false;}}
+function wpGet(id){return wp.filter(function(w){return w.id===id;})[0];}
+function wpDist(a,b){var R=6371000,r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lng-a.lng)*r,x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)*Math.sin(dn/2);return 2*R*Math.asin(Math.min(1,Math.sqrt(x)));}
+function wpBrg(a,b){var r=Math.PI/180,f1=a.lat*r,f2=b.lat*r,dn=(b.lng-a.lng)*r,y=Math.sin(dn)*Math.cos(f2),x=Math.cos(f1)*Math.sin(f2)-Math.sin(f1)*Math.cos(f2)*Math.cos(dn);return (Math.atan2(y,x)/r+360)%360;}
+function wpFmtDist(m){if(m<1000)return Math.round(m)+' m';if(gps.unit==='kn')return (m/1852).toFixed(m<18520?2:1).replace('.',',')+' mn';return (m/1000).toFixed(m<10000?2:1).replace('.',',')+' km';}
+function wpFmtEta(s){if(!isFinite(s)||s>86400)return '';if(s<60)return '<1 min';var m=Math.round(s/60);return m<90?m+' min':Math.floor(m/60)+' h '+wpPad(m%60)+' min';}
+function wpFmtDate(t){var d=new Date(t);return d.toLocaleDateString('it-IT')+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
+function wpDir(b){return Math.round(b)+'° '+GPS_DIR[Math.round(b/45)%8];}
+function wpDepthAt(la,lo){var p=probe(la,lo);if(!p||p.none||p.land===true)return null;if(p.d>0)return {d:p.d,est:false};if(p.f>0)return {d:p.f,est:true};return null;}
+function wpDepthTxt(w){var x=wpDepthAt(w.lat,w.lon);if(!x&&w.d>0)x={d:w.d,est:!!w.est};if(!x)return 'profondità non disponibile';return (x.est?'≈ ':'')+x.d.toFixed(x.d<10?1:0)+' m'+(x.est?' (ipotizzata)':'');}
+function wpNextName(){var m=0;wp.forEach(function(w){var r=/^Punto (\d+)$/.exec(w.name||'');if(r)m=Math.max(m,+r[1]);});return 'Punto '+(m+1);}
+function wpNew(lat,lon,src,name,note,t){
+ var x=wpDepthAt(lat,lon);
+ return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name:name||wpNextName(),note:note||'',lat:lat,lon:lon,d:x?+x.d.toFixed(1):null,est:x?x.est:false,t:t||Date.now(),src:src||'map'};}
+
+// avviso a comparsa
+var wpT=document.createElement('div');wpT.id='wpt';map.getContainer().appendChild(wpT);L.DomEvent.disableClickPropagation(wpT);var wpTT=0;
+function wpToast(html,w){
+ wpT.innerHTML=html;
+ if(w){
+  wpT.appendChild(wpH('button',{text:'Modifica',on:{click:function(){wpT.style.display='none';wpEdit(w.id);}}}));
+  wpT.appendChild(wpH('button',{text:'Annulla',on:{click:function(){wpT.style.display='none';wpDelete(w.id);}}}));}
+ wpT.style.display='block';clearTimeout(wpTT);wpTT=setTimeout(function(){wpT.style.display='none';},w?7000:5000);}
+
+// segnaposto sulla mappa
+map.createPane('wp').style.zIndex=655;
+function wpIcon(w){return L.divIcon({className:'wpic',iconSize:[26,34],iconAnchor:[5,32],html:'<div class="wpi"><svg width="26" height="34" viewBox="0 0 26 34"><path d="M5 32V3" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M5 3H23L17 9.5L23 16H5Z" fill="#fff"/><path d="M5 32V3" stroke="#e8590c" stroke-width="2.4" stroke-linecap="round"/><path d="M5 4H21L16 9.5L21 15H5Z" fill="#e8590c"/></svg><span class="wpn">'+wpEsc(w.name)+'</span></div>'});}
+function wpUndraw(id){if(wpLayer[id]){map.removeLayer(wpLayer[id]);delete wpLayer[id];}}
+function wpDraw(w){
+ wpUndraw(w.id);if(!wpShow)return;
+ var m=L.marker([w.lat,w.lon],{pane:'wp',icon:wpIcon(w),keyboard:false});
+ m.on('click',function(){wpPopup(w.id);});m.addTo(map);wpLayer[w.id]=m;}
+function wpZoom(){var c=map.getContainer();if(map.getZoom()>=11)c.classList.add('wpl');else c.classList.remove('wpl');}
+function wpPopup(id){
+ var w=wpGet(id);if(!w)return;
+ var d=wpH('div',{class:'wppop'},[wpH('b',{text:w.name}),wpH('div',{text:wpDepthTxt(w)}),wpH('div',{text:wpFmtDate(w.t)})]);
+ if(gps.last){var a={lat:gps.last.lat,lng:gps.last.lng},b={lat:w.lat,lng:w.lon};d.appendChild(wpH('div',{text:'da te: '+wpFmtDist(wpDist(a,b))+' · '+wpDir(wpBrg(a,b))}));}
+ if(w.note)d.appendChild(wpH('div',{text:w.note,style:'font-style:italic;margin-top:4px'}));
+ d.appendChild(wpH('button',{text:'Vai',on:{click:function(){map.closePopup();wpGo(id);}}}));
+ d.appendChild(wpH('button',{text:'Modifica',style:'margin-left:6px',on:{click:function(){map.closePopup();wpEdit(id);}}}));
+ L.popup({offset:[0,-26]}).setLatLng([w.lat,w.lon]).setContent(d).openOn(map);}
+
+// aggiungere / togliere
+function wpAdd(lat,lon,src,acc){
+ var w=wpNew(lat,lon,src);wp.push(w);wpSave();wpDraw(w);
+ wpToast('<b>'+wpEsc(w.name)+'</b> salvato · '+wpEsc(wpDepthTxt(w))+(acc>50?'<br>precisione GPS ±'+Math.round(acc)+' m':'')+'<br>',w);return w;}
+function wpHere(){
+ if(gps.watch===null||!gps.last){wpToast('Per segnare dove sei accendi il GPS (mirino). Oppure tocca la mappa e scegli «Segna questo punto».');return;}
+ wpAdd(gps.last.lat,gps.last.lng,'gps',gps.c?gps.c.accuracy:0);}
+function wpDelete(id){
+ wp=wp.filter(function(w){return w.id!==id;});wpUndraw(id);
+ if(gps.goto===id){gps.goto=null;gps.arrived=false;wpGoUpdate();if(gps.c)gpsRender();}
+ wpSave();}
+
+// "vai a"
+function wpGo(id){
+ var w=wpGet(id);if(!w)return;gps.goto=id;gps.arrived=false;wpCloseP();wpGoUpdate();
+ if(gps.last)map.fitBounds([[gps.last.lat,gps.last.lng],[w.lat,w.lon]],{padding:[60,60],maxZoom:16});
+ else{map.setView([w.lat,w.lon],Math.max(map.getZoom(),13));wpToast('Per vedere distanza e rotta accendi il GPS (mirino).');}
+ if(gps.c)gpsRender();}
+function wpGoUpdate(){
+ var w=gps.goto?wpGet(gps.goto):null;
+ if(gps.goto&&!w)gps.goto=null;
+ if(!w||!gps.last){if(gps.gline){map.removeLayer(gps.gline);gps.gline=null;}return;}
+ var pts=[gps.last,L.latLng(w.lat,w.lon)];
+ if(!gps.gline)gps.gline=L.polyline(pts,{renderer:gpsR,interactive:false,color:'#e8590c',weight:3,opacity:.95,dashArray:'2 8',lineCap:'round'}).addTo(map);
+ else gps.gline.setLatLngs(pts);}
+function wpGoText(){
+ var w=gps.goto?wpGet(gps.goto):null;
+ if(!w){gps.goto=null;return '';}
+ var me=gps.last;if(!me)return '';
+ var a={lat:me.lat,lng:me.lng},b={lat:w.lat,lng:w.lon},d=wpDist(a,b),vh=gps.c?gpsVec(gps.c):{v:null},t;
+ if(d<25){t='<b>Arrivato</b> · '+wpEsc(w.name);
+  if(!gps.arrived){gps.arrived=true;try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch(e){}}}
+ else{if(d>60)gps.arrived=false;
+  t='→ <b>'+wpEsc(w.name)+'</b> · '+wpFmtDist(d)+' · '+wpDir(wpBrg(a,b))+((vh.v!==null&&vh.v>=0.7)?' · ~'+wpFmtEta(d/vh.v):'');}
+ return '<div class="gpsg">'+t+' <span data-x="1" class="gpsx">✕</span></div>';}
+
+// file GPX
+function wpXe(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c];});}
+function wpGpx(){
+ var x='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Isobate" xmlns="http://www.topografix.com/GPX/1/1">\n';
+ wp.forEach(function(w){x+='<wpt lat="'+w.lat.toFixed(6)+'" lon="'+w.lon.toFixed(6)+'">\n <time>'+new Date(w.t||Date.now()).toISOString()+'</time>\n <name>'+wpXe(w.name)+'</name>\n'+(w.note?' <desc>'+wpXe(w.note)+'</desc>\n':'')+'</wpt>\n';});
+ return x+'</gpx>\n';}
+function wpXtag(b,t){
+ var m=new RegExp('<'+t+'(?:\\s[^>]*)?>([\\s\\S]*?)</'+t+'>','i').exec(b);if(!m)return '';
+ var c=/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/.exec(m[1]);if(c)return c[1].trim();
+ return m[1].replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&').trim();}
+function wpParseGpx(txt){
+ var out=[],re=/<wpt\b([^>]*?)(\/>|>([\s\S]*?)<\/wpt>)/gi,m;
+ while((m=re.exec(txt))){
+  var la=/\blat\s*=\s*["']([^"']+)["']/i.exec(m[1]),lo=/\blon\s*=\s*["']([^"']+)["']/i.exec(m[1]);if(!la||!lo)continue;
+  var lat=parseFloat(la[1]),lon=parseFloat(lo[1]);if(!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
+  var b=m[3]||'',tm=wpXtag(b,'time'),t=tm?Date.parse(tm):NaN;
+  out.push({name:wpXtag(b,'name'),note:wpXtag(b,'desc')||wpXtag(b,'cmt'),lat:lat,lon:lon,t:isFinite(t)?t:Date.now()});}
+ return out;}
+function wpParseAny(txt){
+ var s=String(txt).replace(/^\uFEFF/,'').trim();
+ if(s.charAt(0)==='<')return wpParseGpx(s);
+ if(s.charAt(0)==='['||s.charAt(0)==='{'){
+  var j=JSON.parse(s);if(!Array.isArray(j))j=j.waypoints||j.points||[];
+  return j.filter(function(n){return n&&isFinite(n.lat)&&isFinite(n.lon)&&Math.abs(n.lat)<=90&&Math.abs(n.lon)<=180;}).map(function(n){return {name:String(n.name||''),note:String(n.note||n.desc||''),lat:+n.lat,lon:+n.lon,t:isFinite(n.t)?+n.t:Date.now()};});}
+ return [];}
+function wpImport(list){
+ var add=0,skip=0,cap=0;
+ list.forEach(function(n){
+  var nm=String(n.name||'').slice(0,80),dup=wp.some(function(w){return Math.abs(w.lat-n.lat)<1e-5&&Math.abs(w.lon-n.lon)<1e-5&&(!nm||nm===w.name);});
+  if(dup){skip++;return;}
+  if(wp.length>=2000){cap++;return;}
+  var w=wpNew(n.lat,n.lon,'import',nm,String(n.note||'').slice(0,500),n.t);wp.push(w);wpDraw(w);add++;});
+ wpSave();return {add:add,skip:skip,cap:cap};}
+function wpDownload(){
+ if(!wp.length){wpToast('Nessun punto da esportare.');return;}
+ var d=new Date(),n='isobate-waypoint-'+d.getFullYear()+wpPad(d.getMonth()+1)+wpPad(d.getDate())+'.gpx';
+ var b=new Blob([wpGpx()],{type:'application/gpx+xml'}),u=URL.createObjectURL(b),a=document.createElement('a');
+ a.href=u;a.download=n;document.body.appendChild(a);a.click();
+ setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(u);},1500);
+ try{localStorage.setItem('isobate_lastexp',String(Date.now()));}catch(e){}
+ wpToast('File «'+n+'» scaricato nella cartella Download del telefono.');}
+function wpShare(){
+ try{var f=new File([wpGpx()],'isobate-waypoint.gpx',{type:'application/gpx+xml'});
+  navigator.share({files:[f],title:'Waypoint Isobate'}).then(function(){try{localStorage.setItem('isobate_lastexp',String(Date.now()));}catch(e){}}).catch(function(){});}catch(e){wpDownload();}}
+function wpCanShare(){try{return !!(navigator.canShare&&navigator.share&&navigator.canShare({files:[new File(['x'],'x.gpx',{type:'application/gpx+xml'})]}));}catch(e){return false;}}
+
+// pannello a tutto schermo (elenco e modifica)
+var wpP=document.createElement('div');wpP.id='wpp';document.body.appendChild(wpP);
+function wpOpenP(){wpP.style.display='flex';if(!wpOpen){wpOpen=true;try{history.pushState({wp:1},'');}catch(e){}}}
+function wpCloseP(fromPop){wpP.style.display='none';if(wpOpen){wpOpen=false;if(!fromPop){try{if(history.state&&history.state.wp)history.back();}catch(e){}}}}
+window.addEventListener('popstate',function(){if(wpOpen)wpCloseP(true);});
+function wpFrame(title){
+ wpP.innerHTML='';
+ var bd=wpH('div',{class:'bd'});
+ wpP.appendChild(wpH('div',{class:'bar'},[wpH('span',{text:title}),wpH('button',{text:'Chiudi',on:{click:function(){wpCloseP();}}})]));
+ wpP.appendChild(bd);wpOpenP();return bd;}
+function wpList(){
+ var bd=wpFrame('Waypoint ('+wp.length+')'),me=gps.last?{lat:gps.last.lat,lng:gps.last.lng}:null;
+ var inp=wpH('input',{type:'file',style:'display:none'});
+ inp.addEventListener('change',function(){
+  var f=inp.files&&inp.files[0];if(!f)return;
+  if(f.size>5e6){wpToast('File troppo grande per essere un elenco di punti.');return;}
+  var r=new FileReader();
+  r.onload=function(){try{
+   var l=wpParseAny(r.result);
+   if(!l.length){wpToast('Nel file non trovo nessun punto (formati accettati: GPX).');return;}
+   var x=wpImport(l);wpList();
+   wpToast('Importati '+x.add+' punti'+(x.skip?', '+x.skip+' già presenti':'')+(x.cap?', '+x.cap+' oltre il limite di 2000':'')+'.');
+  }catch(e){wpToast('Non riesco a leggere questo file.');}};
+  r.onerror=function(){wpToast('Non riesco ad aprire il file.');};
+  r.readAsText(f);inp.value='';});
+ var acts=[wpH('button',{text:'Esporta GPX',on:{click:wpDownload}})];
+ if(wpCanShare())acts.push(wpH('button',{text:'Condividi',style:'margin-left:6px',on:{click:wpShare}}));
+ acts.push(wpH('button',{text:'Importa',style:'margin-left:6px',on:{click:function(){inp.click();}}}));
+ bd.appendChild(wpH('div',null,acts));bd.appendChild(inp);
+ var last=0;try{last=+localStorage.getItem('isobate_lastexp')||0;}catch(e){}
+ bd.appendChild(wpH('small',{style:'display:block;margin:6px 0;color:'+((wp.length&&!last)?'#b45309':'#456'),text:last?'Ultimo file salvato: '+wpFmtDate(last):(wp.length?'Non hai ancora salvato un file: i punti stanno solo in questo telefono. Esporta ogni tanto.':'I punti restano solo in questo telefono: esporta ogni tanto per averne una copia.')}));
+ bd.appendChild(wpH('label',null,[wpH('input',{type:'checkbox',checked:wpShow,on:{change:function(e){wpShow=!!e.target.checked;try{localStorage.setItem('isobate_wpshow',wpShow?'1':'0');}catch(x){}wp.forEach(wpDraw);}}}),' Mostra i punti sulla mappa']));
+ if(!wp.length){bd.appendChild(wpH('p',{text:'Nessun punto salvato. Con il GPS acceso usa la bandierina con il +, oppure tocca la mappa e scegli «Segna questo punto» (o tieni premuto sulla mappa).'}));return;}
+ var rows=wp.map(function(w){var d=me?wpDist(me,{lat:w.lat,lng:w.lon}):null;return {w:w,d:d};});
+ rows.sort(function(a,b){return me?a.d-b.d:(b.w.t||0)-(a.w.t||0);});
+ rows.forEach(function(r){var w=r.w,info=[];
+  if(me)info.push(wpFmtDist(r.d)+' · '+wpDir(wpBrg(me,{lat:w.lat,lng:w.lon})));
+  info.push(wpDepthTxt(w));info.push(wpFmtDate(w.t));
+  var row=wpH('div',{class:'wprow'},[wpH('b',{text:w.name}),wpH('small',{text:info.join(' · ')})]);
+  if(w.note)row.appendChild(wpH('small',{text:w.note,style:'font-style:italic'}));
+  row.appendChild(wpH('div',{class:'bt'},[
+   wpH('button',{text:'Centra',on:{click:function(){wpCloseP();map.setView([w.lat,w.lon],Math.max(map.getZoom(),14));}}}),
+   wpH('button',{text:'Vai',on:{click:function(){wpGo(w.id);}}}),
+   wpH('button',{text:'Modifica',on:{click:function(){wpEdit(w.id);}}})]));
+  bd.appendChild(row);});}
+function wpEdit(id){
+ var w=wpGet(id);if(!w)return;
+ var bd=wpFrame('Modifica punto'),nm=wpH('input',{type:'text',maxlength:'80',value:w.name}),nt=wpH('textarea',{rows:'4',maxlength:'500',value:w.note||''});
+ bd.appendChild(wpH('label',{style:'display:block'},['Nome',nm]));
+ bd.appendChild(wpH('label',{style:'display:block;margin-top:8px'},['Nota',nt]));
+ bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:w.lat.toFixed(5)+', '+w.lon.toFixed(5)+' · '+wpDepthTxt(w)+' · '+wpFmtDate(w.t)}));
+ var del=wpH('button',{text:'Elimina',class:'wpd',style:'margin-left:6px'}),armed=false;
+ del.addEventListener('click',function(){
+  if(!armed){armed=true;del.textContent='Tocca ancora per eliminare';return;}
+  wpDelete(id);wpCloseP();});
+ bd.appendChild(wpH('div',null,[
+  wpH('button',{text:'Salva',on:{click:function(){w.name=(nm.value||'').trim().slice(0,80)||wpNextName();w.note=(nt.value||'').trim().slice(0,500);wpSave();wpDraw(w);if(gps.c)gpsRender();wpCloseP();}}}),
+  del,wpH('button',{text:'Annulla',style:'margin-left:6px;background:#6b7c85',on:{click:function(){wpCloseP();}}})]));}
+
+// pulsanti sulla mappa (sotto quello del GPS)
+var WpCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
+ var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d),b=L.DomUtil.create('a','',d);
+ a.href='#';a.id='wpb1';a.title='Segna qui';a.setAttribute('role','button');a.setAttribute('aria-label','Segna la mia posizione');
+ a.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 22V3"/><path d="M5 4H16L13 8L16 12H5" fill="currentColor"/><path d="M17 17v6M14 20h6"/></svg>';
+ b.href='#';b.id='wpb2';b.title='Elenco waypoint';b.setAttribute('role','button');b.setAttribute('aria-label','Elenco waypoint');
+ b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>';
+ L.DomEvent.disableClickPropagation(d);
+ L.DomEvent.on(a,'click',function(e){L.DomEvent.preventDefault(e);wpHere();});
+ L.DomEvent.on(b,'click',function(e){L.DomEvent.preventDefault(e);wpList();});
+ return d;}});
+map.addControl(new WpCtl());
+map.on('contextmenu',function(e){wpAdd(e.latlng.lat,e.latlng.lng,'map');});
+map.on('zoomend',wpZoom);
+wpLoad();wp.forEach(wpDraw);wpZoom();
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});}catch(e){}
+// --- fine WAYPOINT ---
+
 
 fetch('data/tiles.json',{cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(t){
  T=t;['C','M','F'].forEach(function(L){avail[L]={};(t.levels[L]||[]).forEach(function(k){avail[L][k]=1;});});
