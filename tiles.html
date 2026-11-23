@@ -43,6 +43,9 @@
  .wprow{border:1px solid #cfdde3;border-radius:8px;background:#fff;padding:8px 10px;margin:8px 0} .wprow small{display:block;color:#456}
  .wprow .bt button{margin:6px 6px 0 0;padding:6px 12px;font-size:13px} .wpd{background:#c0392b}
  .gpsg{font-size:15px;font-weight:600;margin:2px 0 4px;color:#ffb27a} .gpsx{display:inline-block;padding:2px 9px;margin-left:6px;background:rgba(255,255,255,.2);border-radius:4px;cursor:pointer}
+ #trkb1,#trkb2{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#7c3aed} #trkb1.rec{background:#dc2626;color:#fff}
+ .trkbar{height:8px;background:#dbe6ea;border-radius:4px;overflow:hidden} .trkfill{height:100%;background:#7c3aed} .trkfill.o{background:#e8890c} .trkfill.r{background:#dc2626}
+ .gpsr{font-size:14px;font-weight:700;color:#ff8a8a;margin:2px 0 4px}
  @media(max-width:760px){main{flex-direction:column-reverse} aside{width:100%;height:42%}}
 </style>
 </head>
@@ -444,14 +447,14 @@ function gpsRender(){
  var vs=vh.v===null?'—':(vh.v<0.3?0:vh.v*k).toFixed(1).replace('.',',');
  var rot=vh.h!==null?' · '+Math.round(vh.h)+'° '+GPS_DIR[Math.round(vh.h/45)%8]:'';
  var pr=probe(c.latitude,c.longitude);
- gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div>'+wpGoText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));}
+ gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div>'+wpGoText()+trkText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));}
 function gpsOk(p){
  var c=p.coords,ll=L.latLng(c.latitude,c.longitude),ac=c.accuracy||0;gps.last=ll;gps.c=c;
  if(!gps.dot){
   gps.acc=L.circle(ll,{radius:ac,renderer:gpsR,interactive:false,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:.12}).addTo(map);
   gps.dot=L.circleMarker(ll,{radius:8,renderer:gpsR,interactive:false,color:'#fff',weight:3,fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
  }else{gps.dot.setLatLng(ll);gps.acc.setLatLng(ll);gps.acc.setRadius(ac);}
- var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);wpGoUpdate();
+ var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);wpGoUpdate();trkPoint(c);
  if(gps.first){gps.first=false;map.setView(ll,Math.max(map.getZoom(),14));}
  else if(gps.follow){map.panTo(ll);}
  gpsRender();
@@ -464,6 +467,7 @@ function gpsStart(){
  gps.watch=navigator.geolocation.watchPosition(gpsOk,gpsErr,{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
  gpsLock();gpsUI();}
 function gpsStop(){
+ trkStop();
  if(gps.watch!==null){navigator.geolocation.clearWatch(gps.watch);gps.watch=null;}
  if(gps.dot){map.removeLayer(gps.dot);map.removeLayer(gps.acc);gps.dot=gps.acc=null;}
  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
@@ -515,12 +519,12 @@ function wpNew(lat,lon,src,name,note,t){
 
 // avviso a comparsa
 var wpT=document.createElement('div');wpT.id='wpt';map.getContainer().appendChild(wpT);L.DomEvent.disableClickPropagation(wpT);var wpTT=0;
-function wpToast(html,w){
+function wpToast(html,w,ms){
  wpT.innerHTML=html;
  if(w){
   wpT.appendChild(wpH('button',{text:'Modifica',on:{click:function(){wpT.style.display='none';wpEdit(w.id);}}}));
   wpT.appendChild(wpH('button',{text:'Annulla',on:{click:function(){wpT.style.display='none';wpDelete(w.id);}}}));}
- wpT.style.display='block';clearTimeout(wpTT);wpTT=setTimeout(function(){wpT.style.display='none';},w?7000:5000);}
+ wpT.style.display='block';clearTimeout(wpTT);wpTT=setTimeout(function(){wpT.style.display='none';},ms||(w?7000:5000));}
 
 // segnaposto sulla mappa
 map.createPane('wp').style.zIndex=655;
@@ -698,6 +702,190 @@ map.on('zoomend',wpZoom);
 wpLoad();wp.forEach(wpDraw);wpZoom();
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});}catch(e){}
 // --- fine WAYPOINT ---
+// --- TRACCE ---
+var TRK_KEY='isobate_tracks',TRK_CUR='isobate_trk_cur',TRK_MAX=20000,TRK_LIM=5000000;
+var trks=[],trkShowIds=[],trkCur=null,trkLive=null,trkLayers={},trkBtn=null,trkRecovered=false,trkWarnP=false,trkWarnM=false,trkWarnM2=false,trkSaveFail=false;
+function trkUsage(){var n=0;['isobate_tracks','isobate_trk_cur','isobate_wp','isobate_trkshow'].forEach(function(k){try{var v=localStorage.getItem(k);if(v)n+=k.length+v.length;}catch(e){}});return n;}
+function trkFmtSize(b){return b<1048576?Math.max(1,Math.round(b/1024))+' KB':(b/1048576).toFixed(1).replace('.',',')+' MB';}
+function trkAlert(msg){wpToast('⚠ '+wpEsc(msg),null,15000);try{if(navigator.vibrate)navigator.vibrate([300,150,300]);}catch(e){}}
+function trkCheckMem(){
+ var u=trkUsage();
+ if(u>=TRK_LIM*0.95&&!trkWarnM2){trkWarnM2=trkWarnM=true;trkAlert('Spazio quasi finito ('+trkFmtSize(u)+' di circa '+trkFmtSize(TRK_LIM)+'). Esporta e cancella subito le tracce vecchie.');}
+ else if(u>=TRK_LIM*0.8&&!trkWarnM){trkWarnM=true;trkAlert('Spazio per le tracce all’80% ('+trkFmtSize(u)+' di circa '+trkFmtSize(TRK_LIM)+'). Esporta e cancella le tracce vecchie.');}}
+function trkSave(){try{localStorage.setItem(TRK_KEY,JSON.stringify(trks));localStorage.setItem('isobate_trkshow',JSON.stringify(trkShowIds));return true;}catch(e){wpToast('Non riesco a salvare le tracce (spazio pieno). Esporta subito il file GPX e cancella le tracce vecchie.',null,15000);return false;}}
+function trkSaveCur(){
+ if(!trkCur)return;
+ try{localStorage.setItem(TRK_CUR,JSON.stringify(trkCur));trkSaveFail=false;}
+ catch(e){if(!trkSaveFail){trkSaveFail=true;trkAlert('Spazio pieno: la registrazione continua ma non è protetta se l’app si chiude. Esporta o cancella tracce vecchie.');}}}
+function trkLoad(){
+ try{var a=JSON.parse(localStorage.getItem(TRK_KEY)||'[]');if(Array.isArray(a))trks=a.filter(function(t){return t&&t.id&&Array.isArray(t.pts)&&isFinite(t.t0);});}catch(e){trks=[];}
+ try{var s=JSON.parse(localStorage.getItem('isobate_trkshow')||'[]');if(Array.isArray(s))trkShowIds=s;}catch(e){}
+ try{var c=JSON.parse(localStorage.getItem(TRK_CUR)||'null');
+  if(c&&Array.isArray(c.pts)&&c.pts.length>1&&isFinite(c.t0)){c.name=(c.name||'Traccia')+' (recuperata)';c.t1=c.t0+c.pts[c.pts.length-1][2]*1000;trks.push(c);trkShowIds.push(c.id);trkSave();trkRecovered=true;}
+  localStorage.removeItem(TRK_CUR);}catch(e){}}
+function trkStats(t){
+ var p=t.pts,d=0,mv=0,mx=0;
+ for(var i=1;i<p.length;i++){var dd=wpDist({lat:p[i-1][0],lng:p[i-1][1]},{lat:p[i][0],lng:p[i][1]}),dt=p[i][2]-p[i-1][2];d+=dd;if(dt>0&&dd/dt>=0.4)mv+=dt;}
+ p.forEach(function(q){if(q[3]>mx)mx=q[3];});
+ return {dist:d,dur:p.length?p[p.length-1][2]:0,avg:mv>0?d/mv:0,max:mx};}
+function trkFmtDur(s){s=Math.round(s);if(s<60)return s+' s';var m=Math.floor(s/60);return m<60?m+' min':Math.floor(m/60)+' h '+wpPad(m%60)+' min';}
+function trkFmtSpd(v){var k=gps.unit==='kn'?1.943844:3.6;return (v*k).toFixed(1).replace('.',',')+(gps.unit==='kn'?' nodi':' km/h');}
+function trkSummary(t){var s=trkStats(t);return wpFmtDist(s.dist)+' · '+trkFmtDur(s.dur)+(s.avg>0?' · media '+trkFmtSpd(s.avg):'')+(s.max>0?' · max '+trkFmtSpd(s.max):'');}
+function trkText(){
+ if(!trkCur)return '';
+ var s=trkStats(trkCur);
+ return '<div class="gpsr">● REC '+wpFmtDist(s.dist)+' · '+trkFmtDur((Date.now()-trkCur.t0)/1000)+((trkWarnP||trkWarnM||trkSaveFail)?' ⚠':'')+'</div>';}
+function trkUI(){if(trkBtn)trkBtn.className=trkCur?'rec':'';}
+function trkLL(t){return t.pts.map(function(p){return [p[0],p[1]];});}
+function trkUndraw(id){if(trkLayers[id]){map.removeLayer(trkLayers[id]);delete trkLayers[id];}}
+function trkDraw(t){
+ trkUndraw(t.id);if(trkShowIds.indexOf(t.id)<0||t.pts.length<2)return;
+ trkLayers[t.id]=L.polyline(trkLL(t),{renderer:gpsR,interactive:false,color:'#9333ea',weight:3,opacity:.75}).addTo(map);}
+function trkStart(silent){
+ if(trkCur)return;
+ if(gps.watch===null)gpsStart();
+ var now=Date.now(),d=new Date(now);
+ trkWarnP=trkWarnM=trkWarnM2=trkSaveFail=false;
+ trkCur={id:now.toString(36)+Math.random().toString(36).slice(2,6),name:'Traccia '+d.toLocaleDateString('it-IT')+' '+wpPad(d.getHours())+':'+wpPad(d.getMinutes()),t0:now,pts:[]};
+ trkLive=L.polyline([],{renderer:gpsR,interactive:false,color:'#7c3aed',weight:4,opacity:.9}).addTo(map);
+ trkUI();trkSaveCur();
+ if(gps.c){trkPoint(gps.c);gpsRender();}
+ if(!silent)wpToast('Registrazione avviata. Tieni l’app aperta e lo schermo acceso: a schermo spento il telefono non registra.');
+ trkCheckMem();}
+function trkRoll(){
+ var t=trkCur;if(!t.part){t.part=1;t.base=t.name;t.name=t.base+' (parte 1)';}
+ var base=t.base,part=t.part+1;
+ trkStop();trkStart(true);
+ trkCur.base=base;trkCur.part=part;trkCur.name=base+' (parte '+part+')';
+ trkAlert('Limite di '+TRK_MAX+' punti raggiunto: traccia salvata e ne è partita un’altra ('+trkCur.name+').');}
+function trkPoint(c){
+ if(!trkCur)return;
+ var ac=c.accuracy||0;if(ac>50)return;
+ var p=trkCur.pts,n=p.length,la=+c.latitude.toFixed(5),lo=+c.longitude.toFixed(5);
+ if(n&&wpDist({lat:p[n-1][0],lng:p[n-1][1]},{lat:la,lng:lo})<Math.max(5,ac*0.5))return;
+ if(n>=TRK_MAX){trkRoll();return;}
+ var sp=(typeof c.speed==='number'&&isFinite(c.speed)&&c.speed>=0)?+c.speed.toFixed(1):null;
+ p.push([la,lo,Math.round((Date.now()-trkCur.t0)/1000),sp]);
+ if(trkLive)trkLive.addLatLng(L.latLng(la,lo));
+ if(!trkWarnP&&p.length>=TRK_MAX*0.8){trkWarnP=true;trkAlert('La traccia è all’80% del limite ('+p.length+' di '+TRK_MAX+' punti). Al limite si chiude e ne parte un’altra in automatico.');}
+ if(p.length%15===0){trkSaveCur();trkCheckMem();}}
+function trkStop(){
+ if(!trkCur)return;
+ var t=trkCur;trkCur=null;
+ if(trkLive){map.removeLayer(trkLive);trkLive=null;}
+ try{localStorage.removeItem(TRK_CUR);}catch(e){}
+ trkUI();
+ if(t.pts.length<2){wpToast('Traccia troppo corta: non salvata.');if(gps.c)gpsRender();return;}
+ t.t1=t.t0+t.pts[t.pts.length-1][2]*1000;trks.push(t);trkShowIds.push(t.id);trkSave();trkDraw(t);
+ wpToast('Traccia salvata · '+wpEsc(trkSummary(t)));if(gps.c)gpsRender();}
+function trkGet(id){return trks.filter(function(t){return t.id===id;})[0];}
+function trkDelete(id){trks=trks.filter(function(t){return t.id!==id;});trkShowIds=trkShowIds.filter(function(x){return x!==id;});trkUndraw(id);trkSave();}
+// GPX: esporta e importa
+function trkGpxHead(){return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Isobate" xmlns="http://www.topografix.com/GPX/1/1">\n';}
+function trkGpxTrk(t){
+ var x='<trk>\n <name>'+wpXe(t.name)+'</name>\n <trkseg>\n';
+ t.pts.forEach(function(p){x+='  <trkpt lat="'+p[0].toFixed(5)+'" lon="'+p[1].toFixed(5)+'"><time>'+new Date(t.t0+p[2]*1000).toISOString()+'</time></trkpt>\n';});
+ return x+' </trkseg>\n</trk>\n';}
+function trkGpx(t){return trkGpxHead()+trkGpxTrk(t)+'</gpx>\n';}
+function trkGpxAll(l){return trkGpxHead()+l.map(trkGpxTrk).join('')+'</gpx>\n';}
+function trkParseGpx(txt){
+ var out=[],re=/<trk\b[^>]*>([\s\S]*?)<\/trk>/gi,m;
+ while((m=re.exec(txt))){
+  var body=m[1],name=wpXtag(body.replace(/<trkseg[\s\S]*$/i,''),'name'),raw=[],pr=/<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/gi,q;
+  while((q=pr.exec(body))){
+   var la=/\blat\s*=\s*["']([^"']+)["']/i.exec(q[1]),lo=/\blon\s*=\s*["']([^"']+)["']/i.exec(q[1]);if(!la||!lo)continue;
+   var lat=parseFloat(la[1]),lon=parseFloat(lo[1]);if(!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
+   var tm=wpXtag(q[2]||'','time'),ts=tm?Date.parse(tm):NaN;raw.push([lat,lon,isFinite(ts)?ts:null]);}
+  if(raw.length<2)continue;
+  var step=Math.ceil(raw.length/TRK_MAX);if(step>1)raw=raw.filter(function(r,i){return i%step===0;});
+  var t0=null;raw.forEach(function(r){if(t0===null&&r[2]!==null)t0=r[2];});if(t0===null)t0=Date.now();
+  var prev=0,pts=raw.map(function(r,i){var s=r[2]===null?prev+1:Math.round((r[2]-t0)/1000);if(i===0)s=0;prev=s;return [+r[0].toFixed(5),+r[1].toFixed(5),s,null];});
+  out.push({name:(name||'Traccia importata').slice(0,80),t0:t0,t1:t0+prev*1000,pts:pts});}
+ return out;}
+function trkImport(list){
+ var add=0,skip=0;
+ list.forEach(function(n){
+  var dup=trks.some(function(t){return Math.abs(t.t0-n.t0)<1500&&t.pts.length===n.pts.length;});
+  if(dup){skip++;return;}
+  n.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);trks.push(n);add++;});
+ trkSave();return {add:add,skip:skip};}
+function trkFileName(t){var d=new Date(t.t0);return 'isobate-traccia-'+d.getFullYear()+wpPad(d.getMonth()+1)+wpPad(d.getDate())+'-'+wpPad(d.getHours())+wpPad(d.getMinutes())+'.gpx';}
+function trkSaveFile(n,text){
+ var b=new Blob([text],{type:'application/gpx+xml'}),u=URL.createObjectURL(b),a=document.createElement('a');
+ a.href=u;a.download=n;document.body.appendChild(a);a.click();
+ setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(u);},1500);
+ wpToast('File «'+n+'» scaricato nella cartella Download del telefono.');}
+function trkDownload(t){trkSaveFile(trkFileName(t),trkGpx(t));}
+function trkDownloadAll(){
+ if(!trks.length){wpToast('Nessuna traccia da esportare.');return;}
+ var d=new Date();trkSaveFile('isobate-tracce-'+d.getFullYear()+wpPad(d.getMonth()+1)+wpPad(d.getDate())+'.gpx',trkGpxAll(trks.slice().sort(function(a,b){return a.t0-b.t0;})));}
+function trkShare(t){
+ try{var f=new File([trkGpx(t)],trkFileName(t),{type:'application/gpx+xml'});navigator.share({files:[f],title:t.name}).catch(function(){});}catch(e){trkDownload(t);}}
+// storico
+function trkList(){
+ var bd=wpFrame('Tracce ('+trks.length+')'),u=trkUsage(),pc=Math.min(100,Math.round(u/TRK_LIM*100));
+ bd.appendChild(wpH('div',{class:'trkbar'},[wpH('div',{class:'trkfill'+(pc>=95?' r':(pc>=80?' o':'')),style:'width:'+pc+'%'})]));
+ bd.appendChild(wpH('small',{style:'display:block;margin:4px 0 8px;color:'+(pc>=80?'#b45309':'#456'),text:'Spazio usato: '+trkFmtSize(u)+' di circa '+trkFmtSize(TRK_LIM)+' ('+pc+'%)'+(pc>=80?' – esporta e cancella le tracce vecchie':'')}));
+ if(trkCur){bd.appendChild(wpH('div',{class:'wprow'},[wpH('b',{text:'● In registrazione'}),wpH('small',{text:trkSummary(trkCur)+' · '+trkCur.pts.length+' punti'}),
+  wpH('div',{class:'bt'},[wpH('button',{text:'Ferma e salva',on:{click:function(){trkStop();trkList();}}})])]));}
+ var inp=wpH('input',{type:'file',style:'display:none'});
+ inp.addEventListener('change',function(){
+  var f=inp.files&&inp.files[0];if(!f)return;
+  if(f.size>30e6){wpToast('File troppo grande.');return;}
+  var r=new FileReader();
+  r.onload=function(){try{
+   var l=trkParseGpx(String(r.result));
+   if(!l.length){wpToast('Nel file non trovo tracce (formato accettato: GPX).');return;}
+   var x=trkImport(l);trkList();
+   wpToast('Importate '+x.add+' tracce'+(x.skip?', '+x.skip+' già presenti':'')+'.');
+  }catch(e){wpToast('Non riesco a leggere questo file.');}};
+  r.onerror=function(){wpToast('Non riesco ad aprire il file.');};
+  r.readAsText(f);inp.value='';});
+ bd.appendChild(wpH('div',null,[wpH('button',{text:'Esporta tutte (GPX)',on:{click:trkDownloadAll}}),wpH('button',{text:'Importa GPX',style:'margin-left:6px',on:{click:function(){inp.click();}}})]));
+ bd.appendChild(inp);
+ bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:'Le tracce stanno nei dati del browser di questo telefono: se cancelli i dati del sito vanno perse. Esporta il GPX per averne una copia. Registra solo con l’app aperta e lo schermo acceso.'}));
+ var q=wpH('input',{type:'text',placeholder:'Cerca per nome',style:'margin:6px 0'}),box=wpH('div');
+ if(trks.length)bd.appendChild(q);
+ bd.appendChild(box);
+ function paint(){
+  box.innerHTML='';var f=(q.value||'').toLowerCase();
+  var l=trks.slice().sort(function(a,b){return b.t0-a.t0;}).filter(function(t){return !f||String(t.name).toLowerCase().indexOf(f)>=0;});
+  if(!l.length){box.appendChild(wpH('p',{text:f?'Nessuna traccia con questo nome.':'Nessuna traccia. Premi il pulsante con il pallino per iniziare a registrare.'}));return;}
+  l.forEach(function(t){
+   var shown=trkShowIds.indexOf(t.id)>=0;
+   var row=wpH('div',{class:'wprow'},[wpH('b',{text:t.name}),wpH('small',{text:wpFmtDate(t.t0)+' · '+trkSummary(t)+' · '+t.pts.length+' punti · '+trkFmtSize(t.pts.length*29)})]);
+   var bt=[
+    wpH('button',{text:shown?'Nascondi':'Mostra',on:{click:function(){var i=trkShowIds.indexOf(t.id);if(i>=0)trkShowIds.splice(i,1);else trkShowIds.push(t.id);trkSave();trkDraw(t);paint();}}}),
+    wpH('button',{text:'Centra',on:{click:function(){if(trkShowIds.indexOf(t.id)<0){trkShowIds.push(t.id);trkSave();trkDraw(t);}wpCloseP();map.fitBounds(trkLL(t),{padding:[40,40]});}}}),
+    wpH('button',{text:'Rinomina',on:{click:function(){trkEdit(t.id);}}}),
+    wpH('button',{text:'Esporta GPX',on:{click:function(){trkDownload(t);}}})];
+   if(wpCanShare())bt.push(wpH('button',{text:'Condividi',on:{click:function(){trkShare(t);}}}));
+   row.appendChild(wpH('div',{class:'bt'},bt));box.appendChild(row);});}
+ q.addEventListener('input',paint);paint();}
+function trkEdit(id){
+ var t=trkGet(id);if(!t)return;
+ var bd=wpFrame('Rinomina traccia'),nm=wpH('input',{type:'text',maxlength:'80',value:t.name});
+ bd.appendChild(wpH('label',{style:'display:block'},['Nome',nm]));
+ bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:wpFmtDate(t.t0)+' · '+trkSummary(t)+' · '+t.pts.length+' punti'}));
+ var del=wpH('button',{text:'Elimina',class:'wpd',style:'margin-left:6px'}),armed=false;
+ del.addEventListener('click',function(){if(!armed){armed=true;del.textContent='Tocca ancora per eliminare';return;}trkDelete(id);trkList();});
+ bd.appendChild(wpH('div',null,[
+  wpH('button',{text:'Salva',on:{click:function(){t.name=(nm.value||'').trim().slice(0,80)||t.name;trkSave();trkList();}}}),
+  del,wpH('button',{text:'Annulla',style:'margin-left:6px;background:#6b7c85',on:{click:function(){trkList();}}})]));}
+var TrkCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
+ var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d),b=L.DomUtil.create('a','',d);
+ a.href='#';a.id='trkb1';a.title='Registra traccia';a.setAttribute('role','button');a.setAttribute('aria-label','Registra traccia');
+ a.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor"/></svg>';
+ b.href='#';b.id='trkb2';b.title='Elenco tracce';b.setAttribute('role','button');b.setAttribute('aria-label','Elenco tracce');
+ b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c4 0 4-6 8-6s4-8 8-10"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/></svg>';
+ L.DomEvent.disableClickPropagation(d);
+ L.DomEvent.on(a,'click',function(e){L.DomEvent.preventDefault(e);if(trkCur)trkStop();else trkStart();});
+ L.DomEvent.on(b,'click',function(e){L.DomEvent.preventDefault(e);trkList();});
+ trkBtn=a;return d;}});
+map.addControl(new TrkCtl());
+trkLoad();trks.forEach(trkDraw);
+if(trkRecovered)wpToast('Ho recuperato una registrazione interrotta: la trovi nell’elenco tracce.');
+// --- fine TRACCE ---
 
 
 fetch('data/tiles.json',{cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(t){
