@@ -26,12 +26,16 @@
  #xh svg{position:absolute;left:-18px;top:-18px}
  #xht{position:absolute;left:0;top:24px;transform:translateX(-50%);white-space:nowrap;background:rgba(8,40,60,.82);color:#fff;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;text-align:center;line-height:1.25}
  #xht small{display:block;font-weight:400;font-size:11px;opacity:.85}
+ .mnuw{position:relative} #mnub{display:flex;align-items:center;justify-content:center;width:34px;height:34px;color:#0b5d73;background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:5px;background-clip:padding-box;position:relative;text-decoration:none}
+ #mnub.open{background:#e3eefc;color:#1a73e8} #mnub.rec::after,#mnub.rec.open::after{content:'';position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#dc2626;border:2px solid #fff}
+ #mnud{display:none;margin-top:6px;background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.55);overflow-y:auto;min-width:215px}
+ .mnui{display:flex;align-items:center;gap:12px;padding:11px 14px;color:#12303a;font-size:15px;font-weight:600;text-decoration:none;border-bottom:1px solid #e3eaee;white-space:nowrap;cursor:pointer} .mnui:last-child{border-bottom:0} .mnui svg{flex:none;width:22px;height:22px} .mnui.rec{color:#dc2626}
+ .gpsai svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))} .wpig.st2{grid-template-columns:repeat(2,1fr)} .wpig.st3{grid-template-columns:repeat(3,1fr)}
  #gpsrc{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#0b5d73} #gpsrc.on{background:#e3eefc;color:#1a73e8}
  #gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:auto;cursor:pointer;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:13px;line-height:1.3}
  #gpsi small{display:block;font-weight:400;font-size:11px;opacity:.85}
  #gpsv{font-size:22px;font-weight:700;line-height:1.2;margin-bottom:2px} #gpsv small{display:inline;font-size:12px;font-weight:400}
  .gpsa{background:none;border:0} .gpsai{width:34px;height:34px;transform-origin:50% 50%}
- #wpb1,#wpb2{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#e8590c} #wpb2{color:#0b5d73}
  .wpic{background:none;border:0} .wpi{position:relative;width:36px;height:36px} .wpi svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
  .wpn{position:absolute;top:39px;left:50%;transform:translateX(-50%);display:block;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,.92);color:#0b2a3a;border-radius:8px;padding:1px 7px;font-size:12px;font-weight:700;line-height:1.35;box-shadow:0 1px 3px rgba(0,0,0,.45)}
  .wpig{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}
@@ -46,7 +50,6 @@
  .wprow{border:1px solid #cfdde3;border-radius:8px;background:#fff;padding:8px 10px;margin:8px 0} .wprow small{display:block;color:#456}
  .wprow .bt button{margin:6px 6px 0 0;padding:6px 12px;font-size:13px} .wpd{background:#c0392b}
  .gpsg{font-size:15px;font-weight:600;margin:2px 0 4px;color:#ffb27a} .gpsx{display:inline-block;padding:2px 9px;margin-left:6px;background:rgba(255,255,255,.2);border-radius:4px;cursor:pointer}
- #trkb1,#trkb2{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#7c3aed} #trkb1.rec{background:#dc2626;color:#fff}
  .trkbar{height:8px;background:#dbe6ea;border-radius:4px;overflow:hidden} .trkfill{height:100%;background:#7c3aed} .trkfill.o{background:#e8890c} .trkfill.r{background:#dc2626}
  .gpsr{font-size:14px;font-weight:700;color:#ff8a8a;margin:2px 0 4px}
  @media(max-width:760px){main{flex-direction:column-reverse} aside{width:100%;height:42%}}
@@ -429,26 +432,31 @@ function gpsShaftEnd(ll,h){
  m+=40;
  return map.containerPointToLatLng(L.point(p.x+Math.sin(t)*m,p.y-Math.cos(t)*m));}
 function gpsShaftRefresh(){
- if(!gps.shaft||!gps.last||gps.h===null)return;
+ if(gps.zooming||!gps.shaft||!gps.last||gps.h===null)return;
  var pts=[gps.last,gpsShaftEnd(gps.last,gps.h)];gps.shaft.setLatLngs(pts);gps.shaftH.setLatLngs(pts);}
 function gpsMove(ll,v,h){
+ var ls=gpsLS();
  if(h===null){
-  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
   if(gps.shaft){map.removeLayer(gps.shaft);map.removeLayer(gps.shaftH);gps.shaft=gps.shaftH=null;}
-  gps.h=null;gps.dot.setStyle({opacity:1,fillOpacity:1});return;}
- gps.dot.setStyle({opacity:0,fillOpacity:0});
- gps.h=h;var pts=[ll,gpsShaftEnd(ll,h)];
- if(!gps.shaft){
-  gps.shaftH=L.polyline(pts,{renderer:gpsR,interactive:false,color:'#ffffff',weight:5.5,opacity:.6,lineCap:'butt'}).addTo(map);
-  gps.shaft=L.polyline(pts,{renderer:gpsR,interactive:false,color:'#2b7fff',weight:2.4,opacity:1,lineCap:'butt'}).addTo(map);
- }else{gps.shaft.setLatLngs(pts);gps.shaftH.setLatLngs(pts);}
- if(!gps.arrow){
-  gps.arrow=L.marker(ll,{pane:'gpsm',interactive:false,keyboard:false,icon:L.divIcon({className:'gpsa',iconSize:[34,34],iconAnchor:[17,17],
-   html:'<div class="gpsai" style="transform:rotate('+h+'deg)"><svg width="34" height="34" viewBox="0 0 34 34"><path d="M17 3L28 29L17 23L6 29Z" fill="#1a73e8" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/></svg></div>'})}).addTo(map);
+  gps.h=null;
  }else{
-  gps.arrow.setLatLng(ll);var el=gps.arrow.getElement();
-  if(el&&el.firstChild)el.firstChild.style.transform='rotate('+h+'deg)';
- }}
+  gps.h=h;gps.lastH=h;var pts=[ll,gpsShaftEnd(ll,h)];
+  if(!gps.shaft){
+   gps.shaftH=L.polyline(pts,{renderer:gpsR,interactive:false,color:ls[4],weight:ls[5],opacity:.6,lineCap:'butt'}).addTo(map);
+   gps.shaft=L.polyline(pts,{renderer:gpsR,interactive:false,color:ls[2],weight:ls[3],opacity:1,lineCap:'butt',dashArray:ls[6]||null}).addTo(map);
+  }else{gps.shaft.setLatLngs(pts);gps.shaftH.setLatLngs(pts);}
+ }
+ if(gps.lastH===null||gps.lastH===undefined){
+  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
+  gps.dot.setStyle({opacity:1,fillOpacity:1});return;}
+ gps.dot.setStyle({opacity:0,fillOpacity:0});
+ var ah=gps.lastH,op=h===null?0.7:1,bs=BOAT_MAP[gps.boat]||BOAT_MAP.arrow,sz=bs[3];
+ if(!gps.arrow){
+  gps.arrow=L.marker(ll,{pane:'gpsm',interactive:false,keyboard:false,opacity:op,icon:L.divIcon({className:'gpsa',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],
+   html:'<div class="gpsai" style="width:'+sz+'px;height:'+sz+'px;transform:rotate('+ah+'deg)">'+boatSvg(bs)+'</div>'})}).addTo(map);
+ }else{
+  gps.arrow.setLatLng(ll);gps.arrow.setOpacity(op);var el=gps.arrow.getElement();
+  if(el&&el.firstChild)el.firstChild.style.transform='rotate('+ah+'deg)';}}
 function gpsRender(){
  var c=gps.c;if(!c)return;
  var vh=gpsVec(c),ac=c.accuracy||0,u=gps.unit==='kn'?'nodi':'km/h',k=gps.unit==='kn'?1.943844:3.6;
@@ -456,15 +464,20 @@ function gpsRender(){
  var rot=vh.h!==null?' · '+Math.round(vh.h)+'° '+GPS_DIR[Math.round(vh.h/45)%8]:'';
  var pr=probe(c.latitude,c.longitude);
  gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div>'+wpGoText()+trkText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));}
-function gpsOk(p){
- var c=p.coords,ll=L.latLng(c.latitude,c.longitude),ac=c.accuracy||0;gps.last=ll;gps.c=c;
+function gpsLayers(){
+ var c=gps.c,ll=gps.last,ac=c.accuracy||0;
  if(!gps.dot){
   gps.acc=L.circle(ll,{radius:ac,renderer:gpsR,interactive:false,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:.12}).addTo(map);
   gps.dot=L.circleMarker(ll,{radius:8,renderer:gpsR,interactive:false,color:'#fff',weight:3,fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
  }else{gps.dot.setLatLng(ll);gps.acc.setLatLng(ll);gps.acc.setRadius(ac);}
- var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);wpGoUpdate();trkPoint(c);
+ var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);wpGoUpdate();}
+function gpsAfterZoom(){gps.zooming=false;gps.pend=false;if(gps.last&&gps.c)gpsLayers();}
+function gpsOk(p){
+ var c=p.coords,ll=L.latLng(c.latitude,c.longitude);gps.last=ll;gps.c=c;
+ if(gps.zooming)gps.pend=true;else gpsLayers();
+ trkPoint(c);
  if(gps.first){gps.first=false;map.setView(ll,Math.max(map.getZoom(),14));}
- else if(gps.follow){map.panTo(ll);}
+ else if(gps.follow&&!gps.zooming){map.panTo(ll);}
  gpsRender();
 }
 function gpsErr(e){
@@ -480,7 +493,7 @@ function gpsStop(){
  if(gps.dot){map.removeLayer(gps.dot);map.removeLayer(gps.acc);gps.dot=gps.acc=null;}
  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
  if(gps.shaft){map.removeLayer(gps.shaft);map.removeLayer(gps.shaftH);gps.shaft=gps.shaftH=null;}
- gps.h=null;
+ gps.h=null;gps.lastH=null;
  if(gps.gline){map.removeLayer(gps.gline);gps.gline=null;}
  gps.c=null;
  gps.last=null;gps.follow=false;
@@ -492,9 +505,72 @@ function gpsRecenter(){
  gps.follow=true;
  if(gps.last)map.setView(gps.last,Math.max(map.getZoom(),14));else gpsMsg('Cerco la posizione…');
  gpsUI();}
-map.on('move',gpsShaftRefresh);map.on('zoomend',gpsShaftRefresh);
+map.on('zoomstart',function(){gps.zooming=true;clearTimeout(gps.zt);gps.zt=setTimeout(function(){gps.zooming=false;},4000);});
+map.on('zoomend',function(){clearTimeout(gps.zt);setTimeout(gpsAfterZoom,0);});
+map.on('moveend',function(){setTimeout(gpsShaftRefresh,0);});
 map.on('dragstart',function(){if(gps.watch!==null&&gps.follow){gps.follow=false;gpsUI();}});
 // --- fine GPS ---
+// --- STILI: barca (cursore), linea di rotta, menu ---
+var BS=' stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"';
+var BOATS=[
+ ['arrow','Freccia','<path d="M20 3L32 34L20 27L8 34Z" fill="#1a73e8"'+BS+'/>',38],
+ ['canoe','Canoa','<path d="M20 2C27.5 11 28 29 20 38C12 29 12.5 11 20 2Z" fill="#ff8a00"'+BS+'/><ellipse cx="20" cy="21" rx="3.8" ry="8" fill="#7a3d00"/><path d="M15.5 14.5H24.5M15.5 27.5H24.5" stroke="#ffd2a0" stroke-width="1.6" stroke-linecap="round"/>',44],
+ ['kayak','Kayak','<path d="M20 1.5C24.5 10 24.5 30 20 38.5C15.5 30 15.5 10 20 1.5Z" fill="#ffd500"'+BS+'/><ellipse cx="20" cy="21" rx="2.9" ry="5.2" fill="#12263a"/><path d="M6 12L34 29" stroke="#ffffff" stroke-width="4.6" stroke-linecap="round"/><path d="M6 12L34 29" stroke="#12263a" stroke-width="2" stroke-linecap="round"/><ellipse cx="6.8" cy="12.4" rx="3.6" ry="1.8" transform="rotate(31 6.8 12.4)" fill="#12263a" stroke="#ffffff" stroke-width="1.2"/><ellipse cx="33.2" cy="28.6" rx="3.6" ry="1.8" transform="rotate(31 33.2 28.6)" fill="#12263a" stroke="#ffffff" stroke-width="1.2"/>',44],
+ ['inflatable','Gommone','<path d="M20 3C27.5 5.5 31 13 31 21V29C31 32.5 28.5 35 25 35H15C11.5 35 9 32.5 9 29V21C9 13 12.5 5.5 20 3Z" fill="#ff3b30"'+BS+'/><path d="M20 11C24 13 25.5 17 25.5 22V30H14.5V22C14.5 17 16 13 20 11Z" fill="#ffe0dc"/><rect x="17" y="35" width="6" height="4.2" rx="1.2" fill="#12263a" stroke="#ffffff" stroke-width="1.4"/>',44],
+ ['rowboat','Barca a remi','<path d="M20 2.5C26.5 9 27 27 24.5 37H15.5C13 27 13.5 9 20 2.5Z" fill="#00c2ff"'+BS+'/><path d="M20 9C23.2 13 23.5 25 22.5 33H17.5C16.5 25 16.8 13 20 9Z" fill="#d4f3ff"/><path d="M17 19H23M17 27H23" stroke="#0a6f8f" stroke-width="1.6" stroke-linecap="round"/><path d="M5 12.5L17 21M35 12.5L23 21" stroke="#ffffff" stroke-width="4.6" stroke-linecap="round"/><path d="M5 12.5L17 21M35 12.5L23 21" stroke="#12263a" stroke-width="2" stroke-linecap="round"/><ellipse cx="5" cy="12.3" rx="1.7" ry="3.3" transform="rotate(-35 5 12.3)" fill="#12263a" stroke="#ffffff" stroke-width="1.2"/><ellipse cx="35" cy="12.3" rx="1.7" ry="3.3" transform="rotate(35 35 12.3)" fill="#12263a" stroke="#ffffff" stroke-width="1.2"/>',44],
+ ['gozzo','Gozzo','<path d="M20 2C28 8 31 17 31 25V31C31 34 29 36 26 36H14C11 36 9 34 9 31V25C9 17 12 8 20 2Z" fill="#1f5cff"'+BS+'/><path d="M20 8.5C25 13 27 19 27 25V31.5H13V25C13 19 15 13 20 8.5Z" fill="#ffffff"/><rect x="16.5" y="18" width="7" height="7" rx="1.6" fill="#1f5cff"/><path d="M14 30H26" stroke="#1f5cff" stroke-width="1.8" stroke-linecap="round"/>',44],
+ ['motorboat','Barca a motore','<path d="M20 1.5C26 8 28 17 28 26V32C28 34.5 26 36 23.5 36H16.5C14 36 12 34.5 12 32V26C12 17 14 8 20 1.5Z" fill="#ff2d95"'+BS+'/><path d="M20 8C23.5 13 24.5 19 24.5 26V31.5H15.5V26C15.5 19 16.5 13 20 8Z" fill="#ffffff"/><path d="M16.5 17.5H23.5" stroke="#ff2d95" stroke-width="2.4" stroke-linecap="round"/><rect x="17.5" y="36" width="5" height="3.8" rx="1" fill="#12263a" stroke="#ffffff" stroke-width="1.4"/>',44],
+ ['sailboat','Barca a vela','<path d="M20 2.5C26 8 27.5 18 26 30C25.5 34 23 37.5 20 38.5C17 37.5 14.5 34 14 30C12.5 18 14 8 20 2.5Z" fill="#12c43b"'+BS+'/><path d="M20 13C27 18.5 27.5 28 21.5 35.5L20 35.5Z" fill="#ffffff" stroke="#0b3d17" stroke-width="1"/><path d="M20 5.5L25 14L20 15Z" fill="#ffffff" stroke="#0b3d17" stroke-width="1"/><circle cx="20" cy="14" r="1.6" fill="#0b3d17"/>',44],
+ ['jetski','Moto d’acqua','<path d="M20 5C25 8.5 27 14 27 20V29C27 31.5 25 33.5 22.5 33.5H17.5C15 33.5 13 31.5 13 29V20C13 14 15 8.5 20 5Z" fill="#8a2be2"'+BS+'/><path d="M20 6.5C23 9 24 12 24 14.5H16C16 12 17 9 20 6.5Z" fill="#d2a8ff"/><rect x="16" y="20" width="8" height="11" rx="3" fill="#ffffff"/><path d="M11 15H29" stroke="#12263a" stroke-width="2.6" stroke-linecap="round"/>',40],
+ ['trawler','Peschereccio','<path d="M20 1.5C27 7 30 16 30 25V33C30 36 28 38 25 38H15C12 38 10 36 10 33V25C10 16 13 7 20 1.5Z" fill="#00d09c"'+BS+'/><rect x="14.5" y="10" width="11" height="9" rx="2" fill="#ffffff"/><rect x="16" y="12" width="8" height="2.6" fill="#00d09c"/><path d="M13 25H27M13 31H27" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/><path d="M20 22L5 15M20 22L35 15" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round"/><path d="M20 22L5 15M20 22L35 15" stroke="#12263a" stroke-width="1.8" stroke-linecap="round"/>',44],
+ ['yacht','Yacht','<path d="M20 1.5C27 8 29.5 17 29.5 26V33C29.5 36 27.5 38 24.5 38H15.5C12.5 38 10.5 36 10.5 33V26C10.5 17 13 8 20 1.5Z" fill="#ffffff" stroke="#12263a" stroke-width="1.8" stroke-linejoin="round"/><path d="M20 9C24.5 14 26 20 26 26V33.5H14V26C14 20 15.5 14 20 9Z" fill="#b9ecff"/><rect x="15.5" y="17" width="9" height="10" rx="2.5" fill="#ffffff" stroke="#12263a" stroke-width="1.2"/><rect x="17" y="19" width="6" height="2.6" fill="#1f5cff"/><path d="M10.7 30H29.3" stroke="#ff2a2a" stroke-width="2.2"/>',44]
+];
+var BOAT_MAP={};BOATS.forEach(function(b){BOAT_MAP[b[0]]=b;});
+function boatSvg(b,sz){return '<svg width="'+(sz||b[3])+'" height="'+(sz||b[3])+'" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">'+b[2]+'</svg>';}
+// linee di rotta: [id, nome, colore, spessore, colore alone, spessore alone, tratteggio]
+var LINES=[
+ ['blue','Blu sottile','#2b7fff',2.4,'#ffffff',5.5,null],
+ ['blue2','Blu spessa','#2b7fff',4.5,'#ffffff',8,null],
+ ['red','Rossa','#ff2a2a',3,'#ffffff',6.5,null],
+ ['yellow','Gialla','#ffe600',3.2,'#0b2a3a',6.5,null],
+ ['white','Bianca','#ffffff',2.6,'#0b2a3a',6,null],
+ ['orange','Arancione spessa','#ff8a00',4,'#ffffff',7.5,null],
+ ['lime','Verde lime','#7dff00',3,'#0b2a3a',6.5,null],
+ ['magenta','Magenta','#ff2fb3',3.6,'#ffffff',7,null],
+ ['cyand','Ciano tratteggiata','#00e5ff',3.4,'#0b2a3a',6.5,'14 10'],
+ ['redd','Rossa tratteggiata','#ff2a2a',4.2,'#ffffff',7.5,'16 10']
+];
+var LINE_MAP={};LINES.forEach(function(l){LINE_MAP[l[0]]=l;});
+gps.boat='arrow';gps.lineId='blue';gps.lastH=null;gps.zooming=false;gps.pend=false;
+try{var sb=localStorage.getItem('isobate_boat');if(sb&&BOAT_MAP[sb])gps.boat=sb;var sl=localStorage.getItem('isobate_line');if(sl&&LINE_MAP[sl])gps.lineId=sl;}catch(e){}
+function gpsLS(){return LINE_MAP[gps.lineId]||LINES[0];}
+function gpsBoatRefresh(){
+ if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
+ if(gps.dot&&gps.c&&gps.last){var vh=gpsVec(gps.c);gpsMove(gps.last,vh.v,vh.h);}}
+function gpsLineRefresh(){
+ if(!gps.shaft)return;var l=gpsLS();
+ gps.shaft.setStyle({color:l[2],weight:l[3],dashArray:l[6]||null});gps.shaftH.setStyle({color:l[4],weight:l[5]});}
+function stGrid(items,cur,cols,cell,onPick){
+ var g=wpH('div',{class:'wpig st'+cols}),btns={};
+ items.forEach(function(it){
+  var b=wpH('button',{class:'wpib'+(it[0]===cur?' sel':''),type:'button','aria-label':it[1]});
+  b.innerHTML=cell(it)+'<span>'+it[1]+'</span>';
+  b.addEventListener('click',function(){for(var k in btns)btns[k].className='wpib';b.className='wpib sel';onPick(it[0]);});
+  btns[it[0]]=b;g.appendChild(b);});
+ return g;}
+function boatPanel(){
+ var bd=wpFrame('Stile della barca');
+ bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Scegli come appare il tuo cursore sulla mappa. Si orienta secondo la rotta.'}));
+ bd.appendChild(stGrid(BOATS,gps.boat,3,function(b){return boatSvg(b,48);},function(id){
+  gps.boat=id;try{localStorage.setItem('isobate_boat',id);}catch(e){}gpsBoatRefresh();wpCloseP();}));}
+function linePanel(){
+ var bd=wpFrame('Linea di rotta');
+ bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Scegli colore e spessore della linea che parte dalla punta della barca. Ogni anteprima è su fondo scuro e chiaro.'}));
+ bd.appendChild(stGrid(LINES,gps.lineId,2,function(l){
+  var d=l[6]?' stroke-dasharray="'+l[6]+'"':'';
+  return '<svg width="100%" height="34" viewBox="0 0 120 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><rect width="60" height="34" fill="#0a2250"/><rect x="60" width="60" height="34" fill="#d9d2b8"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[4]+'" stroke-width="'+l[5]+'" stroke-opacity=".6"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[2]+'" stroke-width="'+l[3]+'"'+d+'/></svg>';
+ },function(id){gps.lineId=id;try{localStorage.setItem('isobate_line',id);}catch(e){}gpsLineRefresh();wpCloseP();}));}
+
 // --- WAYPOINT ---
 var WP_KEY='isobate_wp',wp=[],wpShow=true,wpLayer={},wpOpen=false;
 function wpEsc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -747,17 +823,6 @@ function wpEdit(id){
   del,wpH('button',{text:'Annulla',style:'margin-left:6px;background:#6b7c85',on:{click:function(){wpCloseP();}}})]));}
 
 // pulsanti sulla mappa (sotto quello del GPS)
-var WpCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
- var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d),b=L.DomUtil.create('a','',d);
- a.href='#';a.id='wpb1';a.title='Segna qui';a.setAttribute('role','button');a.setAttribute('aria-label','Segna la mia posizione');
- a.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 22V3"/><path d="M5 4H16L13 8L16 12H5" fill="currentColor"/><path d="M17 17v6M14 20h6"/></svg>';
- b.href='#';b.id='wpb2';b.title='Elenco waypoint';b.setAttribute('role','button');b.setAttribute('aria-label','Elenco waypoint');
- b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>';
- L.DomEvent.disableClickPropagation(d);
- L.DomEvent.on(a,'click',function(e){L.DomEvent.preventDefault(e);wpHere();});
- L.DomEvent.on(b,'click',function(e){L.DomEvent.preventDefault(e);wpList();});
- return d;}});
-map.addControl(new WpCtl());
 map.on('contextmenu',function(e){wpAdd(e.latlng.lat,e.latlng.lng,'map');});
 map.on('zoomend',wpZoom);
 wpLoad();wp.forEach(wpDraw);wpZoom();
@@ -765,7 +830,7 @@ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().
 // --- fine WAYPOINT ---
 // --- TRACCE ---
 var TRK_KEY='isobate_tracks',TRK_CUR='isobate_trk_cur',TRK_MAX=20000,TRK_LIM=5000000;
-var trks=[],trkShowIds=[],trkCur=null,trkLive=null,trkLayers={},trkBtn=null,trkRecovered=false,trkWarnP=false,trkWarnM=false,trkWarnM2=false,trkSaveFail=false;
+var trks=[],trkShowIds=[],trkCur=null,trkLive=null,trkLayers={},trkBtn=null,menuOpen=false,mnuB=null,mnuD=null,trkRecovered=false,trkWarnP=false,trkWarnM=false,trkWarnM2=false,trkSaveFail=false;
 function trkUsage(){var n=0;['isobate_tracks','isobate_trk_cur','isobate_wp','isobate_trkshow'].forEach(function(k){try{var v=localStorage.getItem(k);if(v)n+=k.length+v.length;}catch(e){}});return n;}
 function trkFmtSize(b){return b<1048576?Math.max(1,Math.round(b/1024))+' KB':(b/1048576).toFixed(1).replace('.',',')+' MB';}
 function trkAlert(msg){wpToast('⚠ '+wpEsc(msg),null,15000);try{if(navigator.vibrate)navigator.vibrate([300,150,300]);}catch(e){}}
@@ -796,7 +861,7 @@ function trkText(){
  if(!trkCur)return '';
  var s=trkStats(trkCur);
  return '<div class="gpsr">● REC '+wpFmtDist(s.dist)+' · '+trkFmtDur((Date.now()-trkCur.t0)/1000)+((trkWarnP||trkWarnM||trkSaveFail)?' ⚠':'')+'</div>';}
-function trkUI(){if(trkBtn)trkBtn.className=trkCur?'rec':'';}
+function trkUI(){if(trkBtn){trkBtn.className='mnui'+(trkCur?' rec':'');if(trkBtn._lab)trkBtn._lab.textContent=trkCur?'Ferma registrazione':'Registra traccia';}if(mnuB&&!menuOpen)mnuB.className=trkCur?'rec':'';}
 function trkLL(t){return t.pts.map(function(p){return [p[0],p[1]];});}
 function trkUndraw(id){if(trkLayers[id]){map.removeLayer(trkLayers[id]);delete trkLayers[id];}}
 function trkDraw(t){
@@ -933,17 +998,39 @@ function trkEdit(id){
  bd.appendChild(wpH('div',null,[
   wpH('button',{text:'Salva',on:{click:function(){t.name=(nm.value||'').trim().slice(0,80)||t.name;trkSave();trkList();}}}),
   del,wpH('button',{text:'Annulla',style:'margin-left:6px;background:#6b7c85',on:{click:function(){trkList();}}})]));}
-var TrkCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
- var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d),b=L.DomUtil.create('a','',d);
- a.href='#';a.id='trkb1';a.title='Registra traccia';a.setAttribute('role','button');a.setAttribute('aria-label','Registra traccia');
- a.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor"/></svg>';
- b.href='#';b.id='trkb2';b.title='Elenco tracce';b.setAttribute('role','button');b.setAttribute('aria-label','Elenco tracce');
- b.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c4 0 4-6 8-6s4-8 8-10"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/></svg>';
- L.DomEvent.disableClickPropagation(d);
- L.DomEvent.on(a,'click',function(e){L.DomEvent.preventDefault(e);if(trkCur)trkStop();else trkStart();});
- L.DomEvent.on(b,'click',function(e){L.DomEvent.preventDefault(e);trkList();});
- trkBtn=a;return d;}});
-map.addControl(new TrkCtl());
+var MNU_SVG={
+ mark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 22V3"/><path d="M5 4H16L13 8L16 12H5" fill="currentColor"/><path d="M17 17v6M14 20h6"/></svg>',
+ list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>',
+ rec:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor"/></svg>',
+ track:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c4 0 4-6 8-6s4-8 8-10"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/></svg>',
+ boat:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C16.5 7 17.5 14 16 21H8C6.5 14 7.5 7 12 2Z"/></svg>',
+ line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M4 20L20 4"/></svg>'};
+function mnuClose(){menuOpen=false;if(mnuD)mnuD.style.display='none';if(mnuB)mnuB.className=trkCur?'rec':'';}
+function mnuToggle(){
+ if(menuOpen){mnuClose();return;}
+ menuOpen=true;mnuD.style.maxHeight=Math.max(140,map.getSize().y-210)+'px';mnuD.style.display='block';mnuB.className=(trkCur?'rec ':'')+'open';}
+var MenuCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
+ var w=L.DomUtil.create('div','mnuw');
+ mnuB=wpH('a',{href:'#',id:'mnub',title:'Menu','aria-label':'Menu',role:'button'});
+ mnuB.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7H20M4 12H20M4 17H20"/></svg>';
+ mnuD=wpH('div',{id:'mnud'});
+ function item(label,svg,fn){
+  var a=wpH('a',{href:'#',class:'mnui',role:'button'}),lab=wpH('span',{text:label});
+  a.innerHTML=svg;a.appendChild(lab);a._lab=lab;
+  a.addEventListener('click',function(e){if(e&&e.preventDefault)e.preventDefault();mnuClose();fn();});
+  mnuD.appendChild(a);return a;}
+ item('Segna qui',MNU_SVG.mark,wpHere);
+ item('Waypoint',MNU_SVG.list,wpList);
+ trkBtn=item('Registra traccia',MNU_SVG.rec,function(){if(trkCur)trkStop();else trkStart();});
+ item('Tracce',MNU_SVG.track,trkList);
+ item('Stile della barca',MNU_SVG.boat,boatPanel);
+ item('Linea di rotta',MNU_SVG.line,linePanel);
+ mnuB.addEventListener('click',function(e){if(e&&e.preventDefault)e.preventDefault();mnuToggle();});
+ w.appendChild(mnuB);w.appendChild(mnuD);
+ L.DomEvent.disableClickPropagation(w);
+ return w;}});
+map.addControl(new MenuCtl());
+map.on('click',mnuClose);
 trkLoad();trks.forEach(trkDraw);
 if(trkRecovered)wpToast('Ho recuperato una registrazione interrotta: la trovi nell’elenco tracce.');
 // --- fine TRACCE ---
