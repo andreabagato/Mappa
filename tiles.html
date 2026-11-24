@@ -23,8 +23,8 @@
  .warn{margin-top:14px;padding:8px 10px;border-radius:6px;background:#fff4d6;color:#6b4b00;font-size:12.5px}
  .leaflet-tooltip.d{font-weight:700;background:#08414f;color:#fff;border:0}
  #xh{position:absolute;left:50%;top:50%;width:0;height:0;z-index:700;pointer-events:none}
- #xh svg{position:absolute;left:-14px;top:-14px}
- #xht{position:absolute;left:0;top:20px;transform:translateX(-50%);white-space:nowrap;background:rgba(8,40,60,.82);color:#fff;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;text-align:center;line-height:1.25}
+ #xh svg{position:absolute;left:-18px;top:-18px}
+ #xht{position:absolute;left:0;top:24px;transform:translateX(-50%);white-space:nowrap;background:rgba(8,40,60,.82);color:#fff;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;text-align:center;line-height:1.25}
  #xht small{display:block;font-weight:400;font-size:11px;opacity:.85}
  #gpsb{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#0b5d73}
  #gpsb.on{background:#e3eefc;color:#1a73e8} #gpsb.fol{background:#1a73e8;color:#fff}
@@ -378,7 +378,7 @@ map.on('click',function(e){
 
 // --- mirino con profondita' al centro ---
 var xhEl=document.createElement('div');xhEl.id='xh';xhEl.style.display='none';
-xhEl.innerHTML='<svg width="28" height="28" viewBox="0 0 28 28"><path d="M14 2v8M14 18v8M2 14h8M18 14h8" stroke="#000" stroke-width="4" stroke-linecap="round" opacity=".45" fill="none"/><path d="M14 2v8M14 18v8M2 14h8M18 14h8" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="14" cy="14" r="1.7" fill="#fff"/></svg><div id="xht"></div>';
+xhEl.innerHTML='<svg width="36" height="36" viewBox="0 0 36 36"><path d="M18 2v12M18 22v12M2 18h12M22 18h12" stroke="#000" stroke-width="2.8" stroke-linecap="round" opacity=".45" fill="none"/><path d="M18 2v12M18 22v12M2 18h12M22 18h12" stroke="#fff" stroke-width="1.2" stroke-linecap="round" fill="none"/><circle cx="18" cy="18" r="1.2" fill="#fff"/></svg><div id="xht"></div>';
 map.getContainer().appendChild(xhEl);
 var xht=document.getElementById('xht'),xhTimer=0;
 function xhText(p){
