@@ -444,14 +444,16 @@ function gpsShaftRefresh(){
  bowDraw();}
 function gpsMove(ll,v,h){
  var ls=gpsLS();
- if(h===null){
+ if(h!==null)gps.lastH=h;
+ var lh=gpsLineH(v,h);
+ if(lh===null){
   if(gps.shaft){map.removeLayer(gps.shaft);map.removeLayer(gps.shaftH);gps.shaft=gps.shaftH=null;}
   gps.h=null;
  }else{
-  gps.h=h;gps.lastH=h;var pts=[ll,gpsShaftEnd(ll,h)];
+  gps.h=lh;var pts=[ll,gpsShaftEnd(ll,lh)];
   if(!gps.shaft){
    gps.shaftH=L.polyline(pts,{renderer:gpsR,interactive:false,color:ls[4],weight:ls[5],opacity:.6,lineCap:'butt'}).addTo(map);
-   gps.shaft=L.polyline(pts,{renderer:gpsR,interactive:false,color:ls[2],weight:ls[3],opacity:1,lineCap:'butt',dashArray:ls[6]||null}).addTo(map);
+   gps.shaft=L.polyline(pts,{renderer:gpsR,interactive:false,color:ls[2],weight:ls[3],opacity:1,lineCap:'butt',dashArray:null}).addTo(map);
   }else{gps.shaft.setLatLngs(pts);gps.shaftH.setLatLngs(pts);}
  }
  if(gps.lastH===null||gps.lastH===undefined){
@@ -536,22 +538,34 @@ var BOATS=[
 var BOAT_MAP={};BOATS.forEach(function(b){BOAT_MAP[b[0]]=b;});
 function boatSvg(b,sz){return '<svg width="'+(sz||b[3])+'" height="'+(sz||b[3])+'" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">'+b[2]+'</svg>';}
 // linee di rotta: [id, nome, colore, spessore, colore alone, spessore alone, tratteggio]
-var LINES=[
- ['blue','Blu sottile','#2b7fff',2.4,'#ffffff',5.5,null],
- ['blue2','Blu spessa','#2b7fff',4.5,'#ffffff',8,null],
- ['red','Rossa','#ff2a2a',3,'#ffffff',6.5,null],
- ['yellow','Gialla','#ffe600',3.2,'#0b2a3a',6.5,null],
- ['white','Bianca','#ffffff',2.6,'#0b2a3a',6,null],
- ['orange','Arancione spessa','#ff8a00',4,'#ffffff',7.5,null],
- ['lime','Verde lime','#7dff00',3,'#0b2a3a',6.5,null],
- ['magenta','Magenta','#ff2fb3',3.6,'#ffffff',7,null],
- ['cyand','Ciano tratteggiata','#00e5ff',3.4,'#0b2a3a',6.5,'14 10'],
- ['redd','Rossa tratteggiata','#ff2a2a',4.2,'#ffffff',7.5,'16 10']
-];
-var LINE_MAP={};LINES.forEach(function(l){LINE_MAP[l[0]]=l;});
-gps.boat='arrow';gps.lineId='blue';gps.lastH=null;gps.zooming=false;gps.pend=false;
-try{var sb=localStorage.getItem('isobate_boat');if(sb&&BOAT_MAP[sb])gps.boat=sb;var sl=localStorage.getItem('isobate_line');if(sl&&LINE_MAP[sl])gps.lineId=sl;}catch(e){}
+var LN_COLORS=[['blue','Blu','#2b7fff','#ffffff'],['red','Rosso','#ff2a2a','#ffffff'],['yellow','Giallo','#ffe600','#0b2a3a'],['white','Bianco','#ffffff','#0b2a3a'],['orange','Arancione','#ff8a00','#ffffff'],['lime','Verde lime','#7dff00','#0b2a3a'],['magenta','Magenta','#ff2fb3','#ffffff'],['cyan','Ciano','#00e5ff','#0b2a3a']];
+function lnBuild(dashed){
+ var out=[];
+ LN_COLORS.forEach(function(c){[['s','fine',2.4,'9 7'],['t','grossa',4.6,'13 9']].forEach(function(v){
+  out.push([c[0]+'-'+v[0],c[1]+' '+v[1],c[2],v[2],c[3],+(v[2]+3.2).toFixed(1),dashed?v[3]:null]);});});
+ return out;}
+var LINES=lnBuild(false),BOWLINES=lnBuild(true);
+var LINE_MAP={},BOWLINE_MAP={};LINES.forEach(function(l){LINE_MAP[l[0]]=l;});BOWLINES.forEach(function(l){BOWLINE_MAP[l[0]]=l;});
+var LN_OLD={blue:'blue-s',blue2:'blue-t',red:'red-s',yellow:'yellow-s',white:'white-s',orange:'orange-t',lime:'lime-s',magenta:'magenta-t',cyand:'cyan-t',redd:'red-t'};
+var LN_THR=['never','std','5','10','15'];
+gps.boat='arrow';gps.lineId='blue-s';gps.bowId='white-s';gps.lineOn=true;gps.lineThr='std';gps.lastH=null;gps.zooming=false;gps.pend=false;
+try{
+ var sb=localStorage.getItem('isobate_boat');if(sb&&BOAT_MAP[sb])gps.boat=sb;
+ var sl=localStorage.getItem('isobate_line');if(sl&&LN_OLD[sl])sl=LN_OLD[sl];if(sl&&LINE_MAP[sl])gps.lineId=sl;
+ var sw=localStorage.getItem('isobate_bowstyle');if(sw&&BOWLINE_MAP[sw])gps.bowId=sw;
+ gps.lineOn=localStorage.getItem('isobate_lineon')!=='0';
+ var st=localStorage.getItem('isobate_linethr');if(st&&LN_THR.indexOf(st)>=0)gps.lineThr=st;
+}catch(e){}
 function gpsLS(){return LINE_MAP[gps.lineId]||LINES[0];}
+function bowLS(){return BOWLINE_MAP[gps.bowId]||BOWLINES[0];}
+function gpsLineH(v,h){
+ if(!gps.lineOn)return null;
+ var t=gps.lineThr;
+ if(t==='never')return h!==null?h:((gps.lastH===null||gps.lastH===undefined)?null:gps.lastH);
+ if(h===null)return null;
+ if(t==='std')return h;
+ return (v!==null&&v>=(+t)/unitSpeed()[2])?h:null;}
+function gpsRedo(){if(gps.dot&&gps.c&&gps.last){var vh=gpsVec(gps.c);gpsMove(gps.last,vh.v,vh.h);}}
 function gpsBoatRefresh(){
  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
  if(gps.dot&&gps.c&&gps.last){var vh=gpsVec(gps.c);gpsMove(gps.last,vh.v,vh.h);}}
@@ -571,13 +585,19 @@ function boatPanel(){
  bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Scegli come appare il tuo cursore sulla mappa. Si orienta secondo la rotta.'}));
  bd.appendChild(stGrid(BOATS,gps.boat,3,function(b){return boatSvg(b,48);},function(id){
   gps.boat=id;try{localStorage.setItem('isobate_boat',id);}catch(e){}gpsBoatRefresh();wpCloseP();}));}
+function lnPrev(l){
+ var d=l[6]?' stroke-dasharray="'+l[6]+'"':'';
+ return '<svg width="100%" height="34" viewBox="0 0 120 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><rect width="60" height="34" fill="#0a2250"/><rect x="60" width="60" height="34" fill="#d9d2b8"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[4]+'" stroke-width="'+l[5]+'" stroke-opacity=".6"'+d+'/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[2]+'" stroke-width="'+l[3]+'"'+d+'/></svg>';}
 function linePanel(){
- var bd=wpFrame('Linea di rotta');
- bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Scegli colore e spessore della linea che parte dalla punta della barca. Ogni anteprima è su fondo scuro e chiaro.'}));
- bd.appendChild(stGrid(LINES,gps.lineId,2,function(l){
-  var d=l[6]?' stroke-dasharray="'+l[6]+'"':'';
-  return '<svg width="100%" height="34" viewBox="0 0 120 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><rect width="60" height="34" fill="#0a2250"/><rect x="60" width="60" height="34" fill="#d9d2b8"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[4]+'" stroke-width="'+l[5]+'" stroke-opacity=".6"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[2]+'" stroke-width="'+l[3]+'"'+d+'/></svg>';
- },function(id){gps.lineId=id;try{localStorage.setItem('isobate_line',id);}catch(e){}gpsLineRefresh();wpCloseP();}));}
+ var bd=wpFrame('Linea di rotta'),us=unitSpeed();
+ bd.appendChild(wpH('button',{text:'Linea di rotta: '+(gps.lineOn?'ON':'OFF'),style:'width:100%;margin:0 0 12px;font-size:16px;background:'+(gps.lineOn?'#16a34a':'#6b7c85'),on:{click:function(){
+  gps.lineOn=!gps.lineOn;try{localStorage.setItem('isobate_lineon',gps.lineOn?'1':'0');}catch(e){}gpsRedo();linePanel();}}}));
+ bd.appendChild(wpH('div',{style:'margin:6px 0 2px;font-weight:700;font-size:14px',text:'Togli la linea quando la velocità scende sotto'}));
+ bd.appendChild(wpH('p',{style:'margin:0 0 6px;color:#456;font-size:12px',text:'«Mai»: la linea resta sempre, anche da fermo. I valori 5, 10 e 15 sono nell’unità di velocità scelta ('+us[3]+'). La freccia resta comunque visibile.'}));
+ bd.appendChild(stGrid([['never','Mai'],['std','Standard 0,3 nodi'],['5','5 '+us[3]],['10','10 '+us[3]],['15','15 '+us[3]]],gps.lineThr,3,function(){return '';},function(id){
+  gps.lineThr=id;try{localStorage.setItem('isobate_linethr',id);}catch(e){}gpsRedo();}));
+ bd.appendChild(wpH('div',{style:'margin:14px 0 4px;font-weight:700;font-size:14px',text:'Colore e spessore'}));
+ bd.appendChild(stGrid(LINES,gps.lineId,2,lnPrev,function(id){gps.lineId=id;try{localStorage.setItem('isobate_line',id);}catch(e){}gpsLineRefresh();wpCloseP();}));}
 // --- UNITA' DI MISURA ---
 var GPS_MINV=0.1543;
 var UNITS_SPEED=[['kn','Nodi (miglia nautiche/ora)',1.943844,'nodi'],['kmh','Chilometri/ora',3.6,'km/h'],['mph','Miglia/ora (terrestri)',2.236936,'mi/h']];
@@ -600,7 +620,7 @@ function unitsPanel(){
  var bd=wpFrame('Unità di misura');
  function sec(title,arr,key){
   bd.appendChild(wpH('div',{style:'margin:12px 0 4px;font-weight:700;font-size:14px',text:title}));
-  bd.appendChild(stGrid(arr,units[key],1,function(){return '';},function(id){units[key]=id;unitsSave();if(gps.c)gpsRender();}));}
+  bd.appendChild(stGrid(arr,units[key],1,function(){return '';},function(id){units[key]=id;unitsSave();gpsRedo();if(gps.c)gpsRender();}));}
  sec('Velocità',UNITS_SPEED,'speed');sec('Distanze',UNITS_DIST,'dist');sec('Profondità',UNITS_DEPTH,'depth');
  bd.appendChild(wpH('small',{style:'display:block;margin-top:10px;color:#456',text:'Le isobate sulla mappa e le profondità da disegnare restano in metri. Toccando il riquadro in basso a sinistra puoi cambiare al volo l’unità della velocità.'}));}
 
@@ -648,7 +668,6 @@ cmpEl.addEventListener('click',function(){setOrient(gps.cu?'north':'course');});
 map.on('resize',cuApply);
 
 // --- LINEA DELLA PRUA (bussola del telefono) ---
-var BOW_LINE=['#ffffff',3.4,'#0b2a3a',7,'2 9'];
 gps.bowOn=false;gps.bowOff=0;gps.bowC=null;gps.bn=0;gps.bsx=0;gps.bcx=0;gps.bowT=0;gps.bowEv=0;gps.bow=null;gps.bowHalo=null;gps.bowL=null;
 try{gps.bowOn=localStorage.getItem('isobate_bow')==='1';gps.bowOff=+localStorage.getItem('isobate_bowoff')||0;}catch(e){}
 function bowRaw(ev){
@@ -668,9 +687,13 @@ function bowDraw(){
  if(h===null||!gps.last){bowClear();return;}
  var pts=[gps.last,gpsShaftEnd(gps.last,h)];
  if(!gps.bow){
-  gps.bowHalo=L.polyline(pts,{renderer:gpsR,interactive:false,color:BOW_LINE[2],weight:BOW_LINE[3],opacity:.55,lineCap:'round'}).addTo(map);
-  gps.bow=L.polyline(pts,{renderer:gpsR,interactive:false,color:BOW_LINE[0],weight:BOW_LINE[1],opacity:1,lineCap:'round',dashArray:BOW_LINE[4]}).addTo(map);
+  var bl=bowLS();
+  gps.bowHalo=L.polyline(pts,{renderer:gpsR,interactive:false,color:bl[4],weight:bl[5],opacity:.55,lineCap:'butt',dashArray:bl[6]}).addTo(map);
+  gps.bow=L.polyline(pts,{renderer:gpsR,interactive:false,color:bl[2],weight:bl[3],opacity:1,lineCap:'butt',dashArray:bl[6]}).addTo(map);
  }else{gps.bow.setLatLngs(pts);gps.bowHalo.setLatLngs(pts);}}
+function bowLineRefresh(){
+ if(!gps.bow)return;var l=bowLS();
+ gps.bow.setStyle({color:l[2],weight:l[3],dashArray:l[6]});gps.bowHalo.setStyle({color:l[4],weight:l[5],dashArray:l[6]});}
 function bowEvent(ev){
  var h=bowRaw(ev);if(h===null)return;
  gps.bowEv=Date.now();var r=h*Math.PI/180;
@@ -704,10 +727,12 @@ function bowCalibrate(){
 function bowReset(){gps.bowOff=0;try{localStorage.setItem('isobate_bowoff','0');}catch(e){}bowDraw();wpToast('Calibrazione azzerata.');}
 function bowPanel(){
  var bd=wpFrame('Linea della prua'),h=bowHeading();
- bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Mostra una seconda linea (bianca punteggiata) con la direzione in cui punta davvero la barca, letta dalla bussola del telefono. A bassa velocità, con vento o corrente forti è diversa dalla rotta.'}));
+ bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Mostra una seconda linea tratteggiata con la direzione in cui punta davvero la barca, letta dalla bussola del telefono. A bassa velocità, con vento o corrente forti è diversa dalla rotta.'}));
  bd.appendChild(wpH('button',{text:gps.bowOn?'Disattiva la linea della prua':'Attiva la linea della prua',on:{click:function(){bowSet(!gps.bowOn);bowPanel();}}}));
  bd.appendChild(wpH('small',{style:'display:block;margin:10px 0;color:#456',text:!gps.bowOn?'Linea spenta.':(h===null?'Bussola: ancora nessun dato…':'Bussola attiva · prua '+Math.round(h)+'° · correzione '+Math.round(gps.bowOff)+'°')}));
  bd.appendChild(wpH('div',null,[wpH('button',{text:'Calibra la prua adesso',on:{click:function(){bowCalibrate();}}}),wpH('button',{text:'Azzera calibrazione',style:'margin-left:6px;background:#6b7c85',on:{click:function(){bowReset();bowPanel();}}})]));
+ bd.appendChild(wpH('div',{style:'margin:14px 0 4px;font-weight:700;font-size:14px',text:'Colore e spessore (sempre tratteggiata)'}));
+ bd.appendChild(stGrid(BOWLINES,gps.bowId,2,lnPrev,function(id){gps.bowId=id;try{localStorage.setItem('isobate_bowstyle',id);}catch(e){}bowLineRefresh();}));
  bd.appendChild(wpH('small',{style:'display:block;margin-top:12px;color:#456;line-height:1.4',text:'Fissa il telefono: in verticale con il retro verso la prua, oppure piatto con il bordo alto verso la prua. Tienilo lontano da motori e metalli. La bussola indica il nord magnetico: per correggere l’errore e la posizione del telefono, naviga dritto a più di 3 nodi e tocca «Calibra».'}));}
 
 
