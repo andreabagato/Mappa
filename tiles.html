@@ -24,8 +24,7 @@
  .leaflet-tooltip.d{font-weight:700;background:#08414f;color:#fff;border:0}
  #xh{position:absolute;left:50%;top:50%;width:0;height:0;z-index:700;pointer-events:none}
  #xh svg{position:absolute;left:-18px;top:-18px}
- #xht{position:absolute;left:0;top:24px;transform:translateX(-50%);white-space:nowrap;background:rgba(8,40,60,.82);color:#fff;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;text-align:center;line-height:1.25}
- #xht small{display:block;font-weight:400;font-size:11px;opacity:.85}
+ #xht{position:absolute;left:6px;top:5px;white-space:nowrap;font-size:11px;font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000;pointer-events:none}
  #rot{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:50% 50%;transition:transform .35s linear}
  #cmp{position:absolute;right:10px;top:64px;z-index:800;width:38px;height:38px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;cursor:pointer}
  #cmp svg{transition:transform .35s linear} .wpig.st1{grid-template-columns:1fr}
@@ -391,9 +390,14 @@ function xhText(p){
  if(!p||p.none)return 'Nessun dato<small>in questo punto</small>';
  if(p.land===true)return 'Terraferma';
  if(p.d>0)return depthFmt(p.d);
- if(p.f>0)return '≈ '+depthFmt(p.f)+'<small>ipotizzata, poco affidabile</small>';
+ if(p.f>0)return estFmt(p.f)+'<small>ipotizzata, poco affidabile</small>';
  return 'Terraferma o dato assente';}
-function updXh(){xhTimer=0;var c=map.getCenter();xht.innerHTML=xhText(probe(c.lat,c.lng));}
+function xhShort(p){
+ if(!p||p.none||p.land===true)return 'N/A';
+ if(p.d>0)return depthFmt(p.d);
+ if(p.f>0)return estFmt(p.f);
+ return 'N/A';}
+function updXh(){xhTimer=0;var c=map.getCenter();xht.textContent=xhShort(probe(c.lat,c.lng));}
 function schedXh(){if(xhTimer)return;xhTimer=setTimeout(updXh,120);}
 map.on('move zoom moveend zoomend',schedXh);
 function savePref(){try{localStorage.setItem('iso_lbl',document.getElementById('lbl').checked?'1':'0');}catch(e){}}
@@ -587,7 +591,11 @@ try{var uj=JSON.parse(localStorage.getItem('isobate_units')||'null');
   if(UNITS_DEPTH.some(function(u){return u[0]===uj.depth;}))units.depth=uj.depth;}}catch(e){}
 function unitsSave(){try{localStorage.setItem('isobate_units',JSON.stringify(units));}catch(e){}}
 function unitSpeed(){return UNITS_SPEED.filter(function(u){return u[0]===units.speed;})[0]||UNITS_SPEED[0];}
-function depthFmt(d){var u=units.depth,v=u==='ft'?d*3.28084:(u==='fm'?d*0.546807:d),l=u==='ft'?' ft':(u==='fm'?' fm':' m');return (v<10?v.toFixed(1):String(Math.round(v)))+l;}
+function depthFmt(d){
+ var u=units.depth,k=u==='ft'?3.28084:(u==='fm'?0.546807:1),l=u==='ft'?' ft':(u==='fm'?' fm':' m');
+ if(d<5)return '<'+Math.round(5*k)+l;
+ return Math.round(d*k)+l;}
+function estFmt(d){var t=depthFmt(d);return (t.charAt(0)==='<'?'':'≈ ')+t;}
 function unitsPanel(){
  var bd=wpFrame('Unità di misura');
  function sec(title,arr,key){
@@ -734,7 +742,7 @@ function wpFmtEta(s){if(!isFinite(s)||s>86400)return '';if(s<60)return '<1 min';
 function wpFmtDate(t){var d=new Date(t);return d.toLocaleDateString('it-IT')+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
 function wpDir(b){return Math.round(b)+'° '+GPS_DIR[Math.round(b/45)%8];}
 function wpDepthAt(la,lo){var p=probe(la,lo);if(!p||p.none||p.land===true)return null;if(p.d>0)return {d:p.d,est:false};if(p.f>0)return {d:p.f,est:true};return null;}
-function wpDepthTxt(w){var x=wpDepthAt(w.lat,w.lon);if(!x&&w.d>0)x={d:w.d,est:!!w.est};if(!x)return 'profondità non disponibile';return (x.est?'≈ ':'')+depthFmt(x.d)+(x.est?' (ipotizzata)':'');}
+function wpDepthTxt(w){var x=wpDepthAt(w.lat,w.lon);if(!x&&w.d>0)x={d:w.d,est:!!w.est};if(!x)return 'profondità non disponibile';return (x.est?estFmt(x.d):depthFmt(x.d))+(x.est?' (ipotizzata)':'');}
 function wpNextName(){var m=0;wp.forEach(function(w){var r=/^Punto (\d+)$/.exec(w.name||'');if(r)m=Math.max(m,+r[1]);});return 'Punto '+(m+1);}
 function wpNew(lat,lon,src,name,note,t){
  var x=wpDepthAt(lat,lon);
