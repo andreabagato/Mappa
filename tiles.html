@@ -26,6 +26,10 @@
  #xh svg{position:absolute;left:-18px;top:-18px}
  #xht{position:absolute;left:0;top:24px;transform:translateX(-50%);white-space:nowrap;background:rgba(8,40,60,.82);color:#fff;border-radius:6px;padding:3px 9px;font-size:13px;font-weight:600;text-align:center;line-height:1.25}
  #xht small{display:block;font-weight:400;font-size:11px;opacity:.85}
+ #rot{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:50% 50%;transition:transform .35s linear}
+ #cmp{position:absolute;right:10px;top:64px;z-index:800;width:38px;height:38px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+ #cmp svg{transition:transform .35s linear} .wpig.st1{grid-template-columns:1fr}
+ #wpnew{display:flex;align-items:center;justify-content:center;width:34px;height:34px;color:#e8590c}
  .mnuw{position:relative} #mnub{display:flex;align-items:center;justify-content:center;width:34px;height:34px;color:#0b5d73;background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:5px;background-clip:padding-box;position:relative;text-decoration:none}
  #mnub.open{background:#e3eefc;color:#1a73e8} #mnub.rec::after,#mnub.rec.open::after{content:'';position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#dc2626;border:2px solid #fff}
  #mnud{display:none;margin-top:6px;background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.55);overflow-y:auto;min-width:215px}
@@ -35,8 +39,8 @@
  #gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:auto;cursor:pointer;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:13px;line-height:1.3}
  #gpsi small{display:block;font-weight:400;font-size:11px;opacity:.85}
  #gpsv{font-size:22px;font-weight:700;line-height:1.2;margin-bottom:2px} #gpsv small{display:inline;font-size:12px;font-weight:400}
- .gpsa{background:none;border:0} .gpsai{width:34px;height:34px;transform-origin:50% 50%}
- .wpic{background:none;border:0} .wpi{position:relative;width:36px;height:36px} .wpi svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
+ .gpsa{background:none;border:0} .gpsai{width:34px;height:34px;transform-origin:50% 50%;scale:var(--cs,1)}
+ .wpic{background:none;border:0} .wpi{position:relative;width:36px;height:36px;rotate:var(--cr,0deg);scale:var(--cs,1);transform-origin:18px 18px} .wpi svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
  .wpn{position:absolute;top:39px;left:50%;transform:translateX(-50%);display:block;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;background:rgba(255,255,255,.92);color:#0b2a3a;border-radius:8px;padding:1px 7px;font-size:12px;font-weight:700;line-height:1.35;box-shadow:0 1px 3px rgba(0,0,0,.45)}
  .wpig{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}
  .wpib{margin:0!important;padding:5px 2px!important;background:#fff!important;color:#123!important;border:2px solid #cfdde3!important;border-radius:8px!important;font-size:10px!important;line-height:1.15!important;font-weight:600!important}
@@ -372,9 +376,9 @@ function probe(la,lo){
   res={land:land,d:d,f:f,s:s};return true;});
  return res||{none:true,land:land};}
 map.on('click',function(e){
- if(!T)return;var p=probe(e.latlng.lat,e.latlng.lng),txt='Nessun dato qui';
- if(p&&!p.none)txt=p.land===true?'Terraferma':(p.d>0?'Profondità stimata: <b>'+p.d.toFixed(1)+' m</b><br>cella ~'+Math.round(p.s*104)+' m, riferita a LAT':(p.f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+p.f.toFixed(1)+' m (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
- var box=document.createElement('div');box.innerHTML=txt;var bt=document.createElement('button');bt.textContent='📍 Segna questo punto';bt.style.cssText='display:block;margin-top:8px;padding:6px 12px;font-size:13px';
+ if(!T||gps.cu)return;var p=probe(e.latlng.lat,e.latlng.lng),txt='Nessun dato qui';
+ if(p&&!p.none)txt=p.land===true?'Terraferma':(p.d>0?'Profondità stimata: <b>'+depthFmt(p.d)+'</b><br>cella ~'+Math.round(p.s*104)+' m, riferita a LAT':(p.f>0?'Nessun dato EMODnet qui.<br>Profondità <b>ipotizzata</b> dai punti vicini: circa '+depthFmt(p.f)+' (poco affidabile, zona tratteggiata)':'Terraferma o dato assente'));
+ var box=document.createElement('div');box.innerHTML=txt;var bt=document.createElement('button');bt.textContent='📍 Nuovo waypoint qui';bt.style.cssText='display:block;margin-top:8px;padding:6px 12px;font-size:13px';
  bt.addEventListener('click',function(){map.closePopup();wpAdd(e.latlng.lat,e.latlng.lng,'map');});box.appendChild(bt);
  L.popup().setLatLng(e.latlng).setContent(box).openOn(map);});
 
@@ -386,8 +390,8 @@ var xht=document.getElementById('xht'),xhTimer=0;
 function xhText(p){
  if(!p||p.none)return 'Nessun dato<small>in questo punto</small>';
  if(p.land===true)return 'Terraferma';
- if(p.d>0)return p.d.toFixed(p.d<10?1:0)+' m';
- if(p.f>0)return '≈ '+Math.round(p.f)+' m<small>ipotizzata, poco affidabile</small>';
+ if(p.d>0)return depthFmt(p.d);
+ if(p.f>0)return '≈ '+depthFmt(p.f)+'<small>ipotizzata, poco affidabile</small>';
  return 'Terraferma o dato assente';}
 function updXh(){xhTimer=0;var c=map.getCenter();xht.innerHTML=xhText(probe(c.lat,c.lng));}
 function schedXh(){if(xhTimer)return;xhTimer=setTimeout(updXh,120);}
@@ -402,12 +406,11 @@ document.getElementById('op').oninput=function(e){map.getPane('bands').style.opa
 
 // --- GPS: posizione in tempo reale ---
 var gpsR=L.svg({pane:(function(){var p=map.createPane('gps');p.style.zIndex=660;return 'gps';})()}).addTo(map);
-var gps={watch:null,follow:false,first:true,dot:null,acc:null,last:null,lock:null,rbtn:null,h:null,shaftH:null,c:null,arrow:null,shaft:null,unit:'kmh',goto:null,gline:null,arrived:false};
+var gps={watch:null,follow:false,first:true,dot:null,acc:null,last:null,lock:null,rbtn:null,h:null,shaftH:null,c:null,arrow:null,shaft:null,goto:null,gline:null,arrived:false};
 map.createPane('gpsm').style.zIndex=670;
-try{if(localStorage.getItem('isobate_unit')==='kn')gps.unit='kn';}catch(e){}
 var gpsInfo=document.createElement('div');gpsInfo.id='gpsi';map.getContainer().appendChild(gpsInfo);
 L.DomEvent.disableClickPropagation(gpsInfo);
-L.DomEvent.on(gpsInfo,'click',function(ev){var t=ev&&ev.target;if(t&&t.getAttribute&&t.getAttribute('data-x')){gps.goto=null;gps.arrived=false;wpGoUpdate();if(gps.c)gpsRender();return;}if(!gps.c)return;gps.unit=gps.unit==='kn'?'kmh':'kn';try{localStorage.setItem('isobate_unit',gps.unit);}catch(e){}gpsRender();});
+L.DomEvent.on(gpsInfo,'click',function(ev){var t=ev&&ev.target;if(t&&t.getAttribute&&t.getAttribute('data-x')){gps.goto=null;gps.arrived=false;wpGoUpdate();if(gps.c)gpsRender();return;}if(!gps.c)return;var ks=UNITS_SPEED.map(function(u){return u[0];});units.speed=ks[(ks.indexOf(units.speed)+1)%ks.length];unitsSave();gpsRender();});
 var GpsCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
  var d=L.DomUtil.create('div','leaflet-bar'),r=L.DomUtil.create('a','',d);
  r.href='#';r.id='gpsrc';r.title='Riposiziona sul cursore';r.setAttribute('role','button');r.setAttribute('aria-label','Riposiziona la mappa sul cursore');
@@ -424,7 +427,7 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 var GPS_DIR=['N','NE','E','SE','S','SO','O','NO'];
 function gpsVec(c){
  var v=(typeof c.speed==='number'&&isFinite(c.speed)&&c.speed>=0)?c.speed:null;
- var h=(v!==null&&v>=0.7&&typeof c.heading==='number'&&isFinite(c.heading))?c.heading:null;
+ var h=(v!==null&&v>=GPS_MINV&&typeof c.heading==='number'&&isFinite(c.heading))?c.heading:null;
  return {v:v,h:h};}
 function gpsShaftEnd(ll,h){
  var sz=map.getSize(),p=map.latLngToContainerPoint(ll),t=h*Math.PI/180,m=0;
@@ -432,8 +435,9 @@ function gpsShaftEnd(ll,h){
  m+=40;
  return map.containerPointToLatLng(L.point(p.x+Math.sin(t)*m,p.y-Math.cos(t)*m));}
 function gpsShaftRefresh(){
- if(gps.zooming||!gps.shaft||!gps.last||gps.h===null)return;
- var pts=[gps.last,gpsShaftEnd(gps.last,gps.h)];gps.shaft.setLatLngs(pts);gps.shaftH.setLatLngs(pts);}
+ if(gps.zooming)return;
+ if(gps.shaft&&gps.last&&gps.h!==null){var pts=[gps.last,gpsShaftEnd(gps.last,gps.h)];gps.shaft.setLatLngs(pts);gps.shaftH.setLatLngs(pts);}
+ bowDraw();}
 function gpsMove(ll,v,h){
  var ls=gpsLS();
  if(h===null){
@@ -459,8 +463,8 @@ function gpsMove(ll,v,h){
   if(el&&el.firstChild)el.firstChild.style.transform='rotate('+ah+'deg)';}}
 function gpsRender(){
  var c=gps.c;if(!c)return;
- var vh=gpsVec(c),ac=c.accuracy||0,u=gps.unit==='kn'?'nodi':'km/h',k=gps.unit==='kn'?1.943844:3.6;
- var vs=vh.v===null?'—':(vh.v<0.3?0:vh.v*k).toFixed(1).replace('.',',');
+ var vh=gpsVec(c),ac=c.accuracy||0,us=unitSpeed(),u=us[3],k=us[2];
+ var vs=vh.v===null?'—':(vh.v<GPS_MINV?0:vh.v*k).toFixed(1).replace('.',',');
  var rot=vh.h!==null?' · '+Math.round(vh.h)+'° '+GPS_DIR[Math.round(vh.h/45)%8]:'';
  var pr=probe(c.latitude,c.longitude);
  gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div>'+wpGoText()+trkText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(pr)+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));}
@@ -470,7 +474,7 @@ function gpsLayers(){
   gps.acc=L.circle(ll,{radius:ac,renderer:gpsR,interactive:false,color:'#1a73e8',weight:1,fillColor:'#1a73e8',fillOpacity:.12}).addTo(map);
   gps.dot=L.circleMarker(ll,{radius:8,renderer:gpsR,interactive:false,color:'#fff',weight:3,fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
  }else{gps.dot.setLatLng(ll);gps.acc.setLatLng(ll);gps.acc.setRadius(ac);}
- var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);wpGoUpdate();}
+ var vh=gpsVec(c);gpsMove(ll,vh.v,vh.h);wpGoUpdate();bowDraw();cuApply();}
 function gpsAfterZoom(){gps.zooming=false;gps.pend=false;if(gps.last&&gps.c)gpsLayers();}
 function gpsOk(p){
  var c=p.coords,ll=L.latLng(c.latitude,c.longitude);gps.last=ll;gps.c=c;
@@ -493,7 +497,7 @@ function gpsStop(){
  if(gps.dot){map.removeLayer(gps.dot);map.removeLayer(gps.acc);gps.dot=gps.acc=null;}
  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
  if(gps.shaft){map.removeLayer(gps.shaft);map.removeLayer(gps.shaftH);gps.shaft=gps.shaftH=null;}
- gps.h=null;gps.lastH=null;
+ gps.h=null;gps.lastH=null;bowClear();
  if(gps.gline){map.removeLayer(gps.gline);gps.gline=null;}
  gps.c=null;
  gps.last=null;gps.follow=false;
@@ -570,6 +574,134 @@ function linePanel(){
   var d=l[6]?' stroke-dasharray="'+l[6]+'"':'';
   return '<svg width="100%" height="34" viewBox="0 0 120 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><rect width="60" height="34" fill="#0a2250"/><rect x="60" width="60" height="34" fill="#d9d2b8"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[4]+'" stroke-width="'+l[5]+'" stroke-opacity=".6"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[2]+'" stroke-width="'+l[3]+'"'+d+'/></svg>';
  },function(id){gps.lineId=id;try{localStorage.setItem('isobate_line',id);}catch(e){}gpsLineRefresh();wpCloseP();}));}
+// --- UNITA' DI MISURA ---
+var GPS_MINV=0.1543;
+var UNITS_SPEED=[['kn','Nodi (miglia nautiche/ora)',1.943844,'nodi'],['kmh','Chilometri/ora',3.6,'km/h'],['mph','Miglia/ora (terrestri)',2.236936,'mi/h']];
+var UNITS_DIST=[['nm','Miglia nautiche'],['km','Chilometri'],['mi','Miglia terrestri']];
+var UNITS_DEPTH=[['m','Metri'],['ft','Piedi'],['fm','Braccia (fathoms)']];
+var units={speed:'kn',dist:'nm',depth:'m'};
+try{var uj=JSON.parse(localStorage.getItem('isobate_units')||'null');
+ if(uj){
+  if(UNITS_SPEED.some(function(u){return u[0]===uj.speed;}))units.speed=uj.speed;
+  if(UNITS_DIST.some(function(u){return u[0]===uj.dist;}))units.dist=uj.dist;
+  if(UNITS_DEPTH.some(function(u){return u[0]===uj.depth;}))units.depth=uj.depth;}}catch(e){}
+function unitsSave(){try{localStorage.setItem('isobate_units',JSON.stringify(units));}catch(e){}}
+function unitSpeed(){return UNITS_SPEED.filter(function(u){return u[0]===units.speed;})[0]||UNITS_SPEED[0];}
+function depthFmt(d){var u=units.depth,v=u==='ft'?d*3.28084:(u==='fm'?d*0.546807:d),l=u==='ft'?' ft':(u==='fm'?' fm':' m');return (v<10?v.toFixed(1):String(Math.round(v)))+l;}
+function unitsPanel(){
+ var bd=wpFrame('Unità di misura');
+ function sec(title,arr,key){
+  bd.appendChild(wpH('div',{style:'margin:12px 0 4px;font-weight:700;font-size:14px',text:title}));
+  bd.appendChild(stGrid(arr,units[key],1,function(){return '';},function(id){units[key]=id;unitsSave();if(gps.c)gpsRender();}));}
+ sec('Velocità',UNITS_SPEED,'speed');sec('Distanze',UNITS_DIST,'dist');sec('Profondità',UNITS_DEPTH,'depth');
+ bd.appendChild(wpH('small',{style:'display:block;margin-top:10px;color:#456',text:'Le isobate sulla mappa e le profondità da disegnare restano in metri. Toccando il riquadro in basso a sinistra puoi cambiare al volo l’unità della velocità.'}));}
+
+// --- ORIENTAMENTO DELLA MAPPA ---
+var rotEl=null,cmpEl=null;
+gps.cu=false;gps.rotH=0;
+function cuInit(){
+ if(rotEl)return;
+ var mp=map.getPane('mapPane');rotEl=document.createElement('div');rotEl.id='rot';
+ mp.parentNode.insertBefore(rotEl,mp);rotEl.appendChild(mp);}
+function cmpUI(){if(cmpEl&&cmpEl.firstChild)cmpEl.firstChild.style.transform='rotate('+(gps.cu?(-gps.rotH).toFixed(1):0)+'deg)';}
+function cuApply(){
+ if(!gps.cu||!rotEl)return;
+ var h=gps.lastH;if(h===null||h===undefined)h=gps.rotH;
+ gps.rotH+=(((h-gps.rotH+180)%360)+360)%360-180;
+ var a=gps.rotH,sz=map.getSize(),w=sz.x,hh=sz.y,t=a*Math.PI/180,c=Math.abs(Math.cos(t)),s=Math.abs(Math.sin(t)),
+  sc=Math.max((w*c+hh*s)/w,(w*s+hh*c)/hh)*1.02;
+ rotEl.style.transform='rotate('+(-a).toFixed(2)+'deg) scale('+sc.toFixed(4)+')';
+ rotEl.style.setProperty('--cr',a.toFixed(2)+'deg');rotEl.style.setProperty('--cs',(1/sc).toFixed(4));
+ cmpUI();}
+function cuEnable(){
+ try{cuInit();}catch(e){gps.cu=false;wpToast('La rotazione della mappa non è disponibile su questo browser.');return;}
+ gps.cu=true;gps.follow=true;gps.rotH=(gps.lastH===null||gps.lastH===undefined)?0:gps.lastH;
+ map.dragging.disable();map.options.touchZoom='center';map.options.doubleClickZoom='center';map.options.scrollWheelZoom='center';
+ map.closePopup();
+ if(gps.last)map.setView(gps.last,map.getZoom());
+ cuApply();gpsUI();}
+function cuDisable(){
+ gps.cu=false;
+ if(rotEl){rotEl.style.transform='';rotEl.style.removeProperty('--cr');rotEl.style.removeProperty('--cs');}
+ map.dragging.enable();map.options.touchZoom=true;map.options.doubleClickZoom=true;map.options.scrollWheelZoom=true;
+ cmpUI();}
+function setOrient(o,silent){
+ if(o==='course')cuEnable();else cuDisable();
+ try{localStorage.setItem('isobate_orient',gps.cu?'course':'north');}catch(e){}
+ if(!silent)wpToast(gps.cu?'Rotta in alto: la mappa ruota e resta centrata su di te. Per esplorare la mappa torna a «Nord in alto».':'Nord in alto: la mappa è ferma.');}
+function orientPanel(){
+ var bd=wpFrame('Orientamento della mappa');
+ bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Con «Rotta in alto» la mappa ruota e la linea di rotta resta sempre verso l’alto. La mappa si blocca su di te: per spostarla torna a «Nord in alto». Puoi cambiare anche toccando la bussola in alto a destra.'}));
+ bd.appendChild(stGrid([['north','Nord in alto (la mappa è ferma)'],['course','Rotta in alto (la mappa ruota)']],gps.cu?'course':'north',1,function(){return '';},function(id){setOrient(id);wpCloseP();}));}
+cmpEl=document.createElement('div');cmpEl.id='cmp';cmpEl.title='Orientamento della mappa (tocca per cambiare)';
+cmpEl.innerHTML='<svg width="30" height="30" viewBox="0 0 30 30"><path d="M15 3L21 16H9Z" fill="#e11d48"/><path d="M15 27L9 16H21Z" fill="#8a97a0"/><text x="15" y="12.8" text-anchor="middle" font-size="6.5" font-weight="800" font-family="Arial,sans-serif" fill="#ffffff">N</text></svg>';
+map.getContainer().appendChild(cmpEl);L.DomEvent.disableClickPropagation(cmpEl);
+cmpEl.addEventListener('click',function(){setOrient(gps.cu?'north':'course');});
+map.on('resize',cuApply);
+
+// --- LINEA DELLA PRUA (bussola del telefono) ---
+var BOW_LINE=['#ffffff',3.4,'#0b2a3a',7,'2 9'];
+gps.bowOn=false;gps.bowOff=0;gps.bowC=null;gps.bn=0;gps.bsx=0;gps.bcx=0;gps.bowT=0;gps.bowEv=0;gps.bow=null;gps.bowHalo=null;gps.bowL=null;
+try{gps.bowOn=localStorage.getItem('isobate_bow')==='1';gps.bowOff=+localStorage.getItem('isobate_bowoff')||0;}catch(e){}
+function bowRaw(ev){
+ if(typeof ev.webkitCompassHeading==='number'&&isFinite(ev.webkitCompassHeading))return ev.webkitCompassHeading;
+ if(ev.absolute!==true||typeof ev.alpha!=='number')return null;
+ var a=ev.alpha,b=typeof ev.beta==='number'?ev.beta:0,g=typeof ev.gamma==='number'?ev.gamma:0,r=Math.PI/180;
+ if(Math.abs(b)<35&&Math.abs(g)<35)return (360-a)%360;
+ var x=b*r,y=g*r,z=a*r,cY=Math.cos(y),cZ=Math.cos(z),sX=Math.sin(x),sY=Math.sin(y),sZ=Math.sin(z),
+  Vx=-cZ*sY-sZ*sX*cY,Vy=-sZ*sY+cZ*sX*cY;
+ if(Math.abs(Vx)<1e-6&&Math.abs(Vy)<1e-6)return null;
+ return (Math.atan2(Vx,Vy)/r+360)%360;}
+function bowHeading(){return gps.bowC===null?null:(gps.bowC+gps.bowOff+720)%360;}
+function bowClear(){if(gps.bow){map.removeLayer(gps.bow);map.removeLayer(gps.bowHalo);gps.bow=gps.bowHalo=null;}}
+function bowDraw(){
+ if(!gps.bowOn||gps.zooming)return;
+ var h=bowHeading();
+ if(h===null||!gps.last){bowClear();return;}
+ var pts=[gps.last,gpsShaftEnd(gps.last,h)];
+ if(!gps.bow){
+  gps.bowHalo=L.polyline(pts,{renderer:gpsR,interactive:false,color:BOW_LINE[2],weight:BOW_LINE[3],opacity:.55,lineCap:'round'}).addTo(map);
+  gps.bow=L.polyline(pts,{renderer:gpsR,interactive:false,color:BOW_LINE[0],weight:BOW_LINE[1],opacity:1,lineCap:'round',dashArray:BOW_LINE[4]}).addTo(map);
+ }else{gps.bow.setLatLngs(pts);gps.bowHalo.setLatLngs(pts);}}
+function bowEvent(ev){
+ var h=bowRaw(ev);if(h===null)return;
+ gps.bowEv=Date.now();var r=h*Math.PI/180;
+ if(gps.bn===0){gps.bsx=Math.sin(r);gps.bcx=Math.cos(r);}else{gps.bsx=gps.bsx*0.85+Math.sin(r)*0.15;gps.bcx=gps.bcx*0.85+Math.cos(r)*0.15;}
+ gps.bn++;gps.bowC=(Math.atan2(gps.bsx,gps.bcx)*180/Math.PI+360)%360;
+ var now=Date.now();if(now-gps.bowT<100)return;gps.bowT=now;
+ bowDraw();}
+function bowStart(){
+ if(gps.bowL)return;
+ gps.bowL=bowEvent;gps.bn=0;gps.bowC=null;gps.bowEv=0;
+ window.addEventListener('deviceorientationabsolute',gps.bowL,true);
+ window.addEventListener('deviceorientation',gps.bowL,true);
+ clearTimeout(gps.bowTT);
+ gps.bowTT=setTimeout(function(){if(gps.bowOn&&!gps.bowEv)wpToast('La bussola del telefono non risponde: la linea della prua non può comparire.',null,9000);},3500);}
+function bowStop(){
+ if(gps.bowL){window.removeEventListener('deviceorientationabsolute',gps.bowL,true);window.removeEventListener('deviceorientation',gps.bowL,true);gps.bowL=null;}
+ clearTimeout(gps.bowTT);gps.bowC=null;gps.bn=0;bowClear();}
+function bowSet(on){
+ gps.bowOn=!!on;try{localStorage.setItem('isobate_bow',gps.bowOn?'1':'0');}catch(e){}
+ if(gps.bowOn){
+  try{if(typeof DeviceOrientationEvent!=='undefined'&&DeviceOrientationEvent.requestPermission)DeviceOrientationEvent.requestPermission().catch(function(){});}catch(e){}
+  bowStart();
+ }else bowStop();}
+function bowCalibrate(){
+ var vh=gps.c?gpsVec(gps.c):{v:null,h:null};
+ if(!gps.bowOn||gps.bowC===null){wpToast('Prima attiva la linea della prua e controlla che la bussola risponda.',null,7000);return;}
+ if(vh.v===null||vh.v<1.5||vh.h===null){wpToast('Per calibrare naviga in linea retta a più di 3 nodi, con poco vento e corrente: la rotta deve coincidere con la prua.',null,10000);return;}
+ gps.bowOff=(((vh.h-gps.bowC+180)%360)+360)%360-180;
+ try{localStorage.setItem('isobate_bowoff',String(gps.bowOff));}catch(e){}
+ bowDraw();wpToast('Prua calibrata: correzione di '+Math.round(gps.bowOff)+'°.');}
+function bowReset(){gps.bowOff=0;try{localStorage.setItem('isobate_bowoff','0');}catch(e){}bowDraw();wpToast('Calibrazione azzerata.');}
+function bowPanel(){
+ var bd=wpFrame('Linea della prua'),h=bowHeading();
+ bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Mostra una seconda linea (bianca punteggiata) con la direzione in cui punta davvero la barca, letta dalla bussola del telefono. A bassa velocità, con vento o corrente forti è diversa dalla rotta.'}));
+ bd.appendChild(wpH('button',{text:gps.bowOn?'Disattiva la linea della prua':'Attiva la linea della prua',on:{click:function(){bowSet(!gps.bowOn);bowPanel();}}}));
+ bd.appendChild(wpH('small',{style:'display:block;margin:10px 0;color:#456',text:!gps.bowOn?'Linea spenta.':(h===null?'Bussola: ancora nessun dato…':'Bussola attiva · prua '+Math.round(h)+'° · correzione '+Math.round(gps.bowOff)+'°')}));
+ bd.appendChild(wpH('div',null,[wpH('button',{text:'Calibra la prua adesso',on:{click:function(){bowCalibrate();}}}),wpH('button',{text:'Azzera calibrazione',style:'margin-left:6px;background:#6b7c85',on:{click:function(){bowReset();bowPanel();}}})]));
+ bd.appendChild(wpH('small',{style:'display:block;margin-top:12px;color:#456;line-height:1.4',text:'Fissa il telefono: in verticale con il retro verso la prua, oppure piatto con il bordo alto verso la prua. Tienilo lontano da motori e metalli. La bussola indica il nord magnetico: per correggere l’errore e la posizione del telefono, naviga dritto a più di 3 nodi e tocca «Calibra».'}));}
+
 
 // --- WAYPOINT ---
 var WP_KEY='isobate_wp',wp=[],wpShow=true,wpLayer={},wpOpen=false;
@@ -593,12 +725,16 @@ function wpSave(){try{localStorage.setItem(WP_KEY,JSON.stringify(wp));return tru
 function wpGet(id){return wp.filter(function(w){return w.id===id;})[0];}
 function wpDist(a,b){var R=6371000,r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lng-a.lng)*r,x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)*Math.sin(dn/2);return 2*R*Math.asin(Math.min(1,Math.sqrt(x)));}
 function wpBrg(a,b){var r=Math.PI/180,f1=a.lat*r,f2=b.lat*r,dn=(b.lng-a.lng)*r,y=Math.sin(dn)*Math.cos(f2),x=Math.cos(f1)*Math.sin(f2)-Math.sin(f1)*Math.cos(f2)*Math.cos(dn);return (Math.atan2(y,x)/r+360)%360;}
-function wpFmtDist(m){if(m<1000)return Math.round(m)+' m';if(gps.unit==='kn')return (m/1852).toFixed(m<18520?2:1).replace('.',',')+' mn';return (m/1000).toFixed(m<10000?2:1).replace('.',',')+' km';}
+function wpFmtDist(m){
+ var d=units.dist,f=function(x){return x.toFixed(x<10?2:1).replace('.',',');};
+ if(d==='nm')return m<926?Math.round(m)+' m':f(m/1852)+' mn';
+ if(d==='km')return m<1000?Math.round(m)+' m':f(m/1000)+' km';
+ return m<161?Math.round(m*3.28084)+' ft':f(m/1609.344)+' mi';}
 function wpFmtEta(s){if(!isFinite(s)||s>86400)return '';if(s<60)return '<1 min';var m=Math.round(s/60);return m<90?m+' min':Math.floor(m/60)+' h '+wpPad(m%60)+' min';}
 function wpFmtDate(t){var d=new Date(t);return d.toLocaleDateString('it-IT')+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
 function wpDir(b){return Math.round(b)+'° '+GPS_DIR[Math.round(b/45)%8];}
 function wpDepthAt(la,lo){var p=probe(la,lo);if(!p||p.none||p.land===true)return null;if(p.d>0)return {d:p.d,est:false};if(p.f>0)return {d:p.f,est:true};return null;}
-function wpDepthTxt(w){var x=wpDepthAt(w.lat,w.lon);if(!x&&w.d>0)x={d:w.d,est:!!w.est};if(!x)return 'profondità non disponibile';return (x.est?'≈ ':'')+x.d.toFixed(x.d<10?1:0)+' m'+(x.est?' (ipotizzata)':'');}
+function wpDepthTxt(w){var x=wpDepthAt(w.lat,w.lon);if(!x&&w.d>0)x={d:w.d,est:!!w.est};if(!x)return 'profondità non disponibile';return (x.est?'≈ ':'')+depthFmt(x.d)+(x.est?' (ipotizzata)':'');}
 function wpNextName(){var m=0;wp.forEach(function(w){var r=/^Punto (\d+)$/.exec(w.name||'');if(r)m=Math.max(m,+r[1]);});return 'Punto '+(m+1);}
 function wpNew(lat,lon,src,name,note,t){
  var x=wpDepthAt(lat,lon);
@@ -672,6 +808,7 @@ function wpDraw(w){
 function wpZoom(){var c=map.getContainer();if(map.getZoom()>=11)c.classList.add('wpl');else c.classList.remove('wpl');}
 function wpPopup(id){
  var w=wpGet(id);if(!w)return;
+ if(gps.cu){wpToast('Con la mappa ruotata non si toccano i punti: passa a «Nord in alto» dal menu o dalla bussola.');return;}
  var d=wpH('div',{class:'wppop'},[wpHead(w,30),wpH('div',{text:wpDepthTxt(w)}),wpH('div',{text:wpFmtDate(w.t)})]);
  if(gps.last){var a={lat:gps.last.lat,lng:gps.last.lng},b={lat:w.lat,lng:w.lon};d.appendChild(wpH('div',{text:'da te: '+wpFmtDist(wpDist(a,b))+' · '+wpDir(wpBrg(a,b))}));}
  if(w.note)d.appendChild(wpH('div',{text:w.note,style:'font-style:italic;margin-top:4px'}));
@@ -684,7 +821,7 @@ function wpAdd(lat,lon,src,acc){
  var w=wpNew(lat,lon,src);wp.push(w);wpSave();wpDraw(w);
  wpToast('<b>'+wpEsc(w.name)+'</b> salvato · '+wpEsc(wpDepthTxt(w))+(acc>50?'<br>precisione GPS ±'+Math.round(acc)+' m':'')+'<br>',w);return w;}
 function wpHere(){
- if(gps.watch===null||!gps.last){wpToast(gps.watch===null?'Il GPS non è attivo: concedi il permesso di posizione e tocca la freccia. Oppure tocca la mappa e scegli «Segna questo punto».':'Aspetto il segnale GPS: non ho ancora la tua posizione. Oppure tocca la mappa e scegli «Segna questo punto».');return;}
+ if(gps.watch===null||!gps.last){wpToast(gps.watch===null?'Il GPS non è attivo: concedi il permesso di posizione e tocca la freccia. Oppure tocca la mappa e scegli «Nuovo waypoint qui».':'Aspetto il segnale GPS: non ho ancora la tua posizione. Oppure tocca la mappa e scegli «Nuovo waypoint qui».');return;}
  wpAdd(gps.last.lat,gps.last.lng,'gps',gps.c?gps.c.accuracy:0);}
 function wpDelete(id){
  wp=wp.filter(function(w){return w.id!==id;});wpUndraw(id);
@@ -712,7 +849,7 @@ function wpGoText(){
  if(d<25){t='<b>Arrivato</b> · '+wpEsc(w.name);
   if(!gps.arrived){gps.arrived=true;try{if(navigator.vibrate)navigator.vibrate([200,100,200]);}catch(e){}}}
  else{if(d>60)gps.arrived=false;
-  t='→ <b>'+wpEsc(w.name)+'</b> · '+wpFmtDist(d)+' · '+wpDir(wpBrg(a,b))+((vh.v!==null&&vh.v>=0.7)?' · ~'+wpFmtEta(d/vh.v):'');}
+  t='→ <b>'+wpEsc(w.name)+'</b> · '+wpFmtDist(d)+' · '+wpDir(wpBrg(a,b))+((vh.v!==null&&vh.v>=GPS_MINV)?' · ~'+wpFmtEta(d/vh.v):'');}
  return '<div class="gpsg">'+t+' <span data-x="1" class="gpsx">✕</span></div>';}
 
 // file GPX
@@ -794,7 +931,7 @@ function wpList(){
  bd.appendChild(wpH('small',{style:'display:block;margin:6px 0;color:'+((wp.length&&!last)?'#b45309':'#456'),text:last?'Ultimo file salvato: '+wpFmtDate(last):(wp.length?'Non hai ancora salvato un file: i punti stanno solo in questo telefono. Esporta ogni tanto.':'I punti restano solo in questo telefono: esporta ogni tanto per averne una copia.')}));
  bd.appendChild(wpDefIconBox());
  bd.appendChild(wpH('label',null,[wpH('input',{type:'checkbox',checked:wpShow,on:{change:function(e){wpShow=!!e.target.checked;try{localStorage.setItem('isobate_wpshow',wpShow?'1':'0');}catch(x){}wp.forEach(wpDraw);}}}),' Mostra i punti sulla mappa']));
- if(!wp.length){bd.appendChild(wpH('p',{text:'Nessun punto salvato. Con il GPS acceso usa la bandierina con il +, oppure tocca la mappa e scegli «Segna questo punto» (o tieni premuto sulla mappa).'}));return;}
+ if(!wp.length){bd.appendChild(wpH('p',{text:'Nessun punto salvato. Con il GPS acceso usa il pulsante con la bandierina e il + (Nuovo waypoint), oppure tocca la mappa e scegli «Nuovo waypoint qui» (o tieni premuto sulla mappa).'}));return;}
  var rows=wp.map(function(w){var d=me?wpDist(me,{lat:w.lat,lng:w.lon}):null;return {w:w,d:d};});
  rows.sort(function(a,b){return me?a.d-b.d:(b.w.t||0)-(a.w.t||0);});
  rows.forEach(function(r){var w=r.w,info=[];
@@ -823,7 +960,7 @@ function wpEdit(id){
   del,wpH('button',{text:'Annulla',style:'margin-left:6px;background:#6b7c85',on:{click:function(){wpCloseP();}}})]));}
 
 // pulsanti sulla mappa (sotto quello del GPS)
-map.on('contextmenu',function(e){wpAdd(e.latlng.lat,e.latlng.lng,'map');});
+map.on('contextmenu',function(e){if(gps.cu)return;wpAdd(e.latlng.lat,e.latlng.lng,'map');});
 map.on('zoomend',wpZoom);
 wpLoad();wp.forEach(wpDraw);wpZoom();
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});}catch(e){}
@@ -855,7 +992,7 @@ function trkStats(t){
  p.forEach(function(q){if(q[3]>mx)mx=q[3];});
  return {dist:d,dur:p.length?p[p.length-1][2]:0,avg:mv>0?d/mv:0,max:mx};}
 function trkFmtDur(s){s=Math.round(s);if(s<60)return s+' s';var m=Math.floor(s/60);return m<60?m+' min':Math.floor(m/60)+' h '+wpPad(m%60)+' min';}
-function trkFmtSpd(v){var k=gps.unit==='kn'?1.943844:3.6;return (v*k).toFixed(1).replace('.',',')+(gps.unit==='kn'?' nodi':' km/h');}
+function trkFmtSpd(v){var us=unitSpeed();return (v*us[2]).toFixed(1).replace('.',',')+' '+us[3];}
 function trkSummary(t){var s=trkStats(t);return wpFmtDist(s.dist)+' · '+trkFmtDur(s.dur)+(s.avg>0?' · media '+trkFmtSpd(s.avg):'')+(s.max>0?' · max '+trkFmtSpd(s.max):'');}
 function trkText(){
  if(!trkCur)return '';
@@ -1004,7 +1141,10 @@ var MNU_SVG={
  rec:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor"/></svg>',
  track:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c4 0 4-6 8-6s4-8 8-10"/><circle cx="4" cy="20" r="1.5" fill="currentColor"/><circle cx="20" cy="4" r="1.5" fill="currentColor"/></svg>',
  boat:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C16.5 7 17.5 14 16 21H8C6.5 14 7.5 7 12 2Z"/></svg>',
- line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M4 20L20 4"/></svg>'};
+ line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M4 20L20 4"/></svg>',
+ units:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17H21M3 17V12M7.5 17V14M12 17V12M16.5 17V14M21 17V12"/><path d="M6 7H18M6 7L8.5 4.5M6 7L8.5 9.5M18 7L15.5 4.5M18 7L15.5 9.5"/></svg>',
+ orient:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 5L15 13L12 11.5L9 13Z" fill="currentColor"/></svg>',
+ bow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 21V3" stroke-dasharray="1 4.5"/><path d="M8 7L12 3L16 7"/></svg>'};
 function mnuClose(){menuOpen=false;if(mnuD)mnuD.style.display='none';if(mnuB)mnuB.className=trkCur?'rec':'';}
 function mnuToggle(){
  if(menuOpen){mnuClose();return;}
@@ -1019,16 +1159,26 @@ var MenuCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
   a.innerHTML=svg;a.appendChild(lab);a._lab=lab;
   a.addEventListener('click',function(e){if(e&&e.preventDefault)e.preventDefault();mnuClose();fn();});
   mnuD.appendChild(a);return a;}
- item('Segna qui',MNU_SVG.mark,wpHere);
  item('Waypoint',MNU_SVG.list,wpList);
  trkBtn=item('Registra traccia',MNU_SVG.rec,function(){if(trkCur)trkStop();else trkStart();});
  item('Tracce',MNU_SVG.track,trkList);
+ item('Unità di misura',MNU_SVG.units,unitsPanel);
+ item('Orientamento mappa',MNU_SVG.orient,orientPanel);
  item('Stile della barca',MNU_SVG.boat,boatPanel);
  item('Linea di rotta',MNU_SVG.line,linePanel);
+ item('Linea della prua',MNU_SVG.bow,bowPanel);
  mnuB.addEventListener('click',function(e){if(e&&e.preventDefault)e.preventDefault();mnuToggle();});
  w.appendChild(mnuB);w.appendChild(mnuD);
  L.DomEvent.disableClickPropagation(w);
  return w;}});
+var WpBtnCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
+ var d=L.DomUtil.create('div','leaflet-bar'),a=L.DomUtil.create('a','',d);
+ a.href='#';a.id='wpnew';a.title='Nuovo waypoint';a.setAttribute('role','button');a.setAttribute('aria-label','Nuovo waypoint');
+ a.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 22V3"/><path d="M5 4H16L13 8L16 12H5" fill="currentColor"/><path d="M17 17v6M14 20h6"/></svg>';
+ L.DomEvent.disableClickPropagation(d);
+ L.DomEvent.on(a,'click',function(e){L.DomEvent.preventDefault(e);wpHere();});
+ return d;}});
+map.addControl(new WpBtnCtl());
 map.addControl(new MenuCtl());
 map.on('click',mnuClose);
 trkLoad();trks.forEach(trkDraw);
@@ -1036,6 +1186,8 @@ if(trkRecovered)wpToast('Ho recuperato una registrazione interrotta: la trovi ne
 // --- fine TRACCE ---
 // --- GPS sempre attivo: parte da solo all'apertura ---
 if(navigator.geolocation)gpsStart();
+try{if(localStorage.getItem('isobate_orient')==='course')setOrient('course',true);}catch(e){}
+if(gps.bowOn)bowStart();
 
 
 fetch('data/tiles.json',{cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(t){
