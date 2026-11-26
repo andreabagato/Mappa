@@ -48,6 +48,8 @@
  #wpt{position:absolute;top:10px;left:50px;right:50px;z-index:900;display:none;background:rgba(8,40,60,.95);color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.35}
  #wpt button{margin:4px 8px 0 0;padding:4px 10px;font-size:12px;background:#fff;color:#08414f}
  #wpp{position:fixed;left:0;top:0;right:0;bottom:0;z-index:3000;background:#f7fafb;display:none;flex-direction:column}
+ #wpp.sheet{top:auto;max-height:48%;border-radius:14px 14px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.45)}
+ #wpp.sheet .bd{min-height:0}
  #wpp .bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#08414f;color:#fff;font-weight:600}
  #wpp .bar button{margin:0;background:#fff;color:#08414f} #wpp .bd{flex:1;overflow-y:auto;padding:12px 14px}
  .wprow{border:1px solid #cfdde3;border-radius:8px;background:#fff;padding:8px 10px;margin:8px 0} .wprow small{display:block;color:#456}
@@ -69,7 +71,6 @@
  <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
  <label><input type="checkbox" id="lbl" checked> Scritte di profondità sulle isobate</label>
  <label><input type="checkbox" id="dbg"> Mostra i bordi dei tasselli (diagnosi)</label>
- <label style="display:block">Trasparenza dei colori<input type="range" id="op" min="0" max="100" value="50" style="width:100%"></label>
  <button id="redraw">Ridisegna</button>
  <h2>Livelli di dettaglio</h2>
  <p>Le zone <b>tratteggiate</b> sono vicino alla costa dove EMODnet non ha dati: la profondità è solo ipotizzata dai punti vicini.</p>
@@ -87,8 +88,9 @@ var map=L.map('map').setView([40.2,12.6],7);
 var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Immagini © Esri'}).addTo(map);
 var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
 L.control.layers({'Satellite':sat,'Mappa':osm},null).addTo(map);
+try{if(localStorage.getItem('isobate_base')==='osm'){map.removeLayer(sat);osm.addTo(map);}}catch(e){}
 map.attributionControl.addAttribution('Batimetria © EMODnet · costa © OpenStreetMap');
-map.createPane('bands').style.zIndex=350; map.getPane('bands').style.opacity=0.5;
+map.createPane('bands').style.zIndex=350; map.getPane('bands').style.opacity=(function(){try{var q=localStorage.getItem('isobate_bandop');if(q!==null&&q!==''&&+q>=0&&+q<=100)return +q/100;}catch(e){}return 0.5;})();
 map.createPane('isolines').style.zIndex=450;
 var lineR=L.canvas({pane:'isolines'}), osmG=L.layerGroup().addTo(map);
 var T=null, avail={}, coastAvail={}, store={}, coastLoaded={}, coastTiles={}, bytes=0, N=241;
@@ -406,7 +408,6 @@ try{if(localStorage.getItem('iso_lbl')==='0')document.getElementById('lbl').chec
  }catch(e){}
 document.getElementById('redraw').onclick=function(){saveLv();for(var k in store)store[k].geom=null;render();};
 document.getElementById('bands').onchange=document.getElementById('lines').onchange=document.getElementById('dbg').onchange=render;
-document.getElementById('op').oninput=function(e){map.getPane('bands').style.opacity=e.target.value/100;};
 
 // --- GPS: posizione in tempo reale ---
 var gpsR=L.svg({pane:(function(){var p=map.createPane('gps');p.style.zIndex=660;return 'gps';})()}).addTo(map);
@@ -682,10 +683,25 @@ function setOrient(o,silent){
  if(o==='course')cuEnable();else cuDisable();
  try{localStorage.setItem('isobate_orient',gps.cu?'course':'north');}catch(e){}
  if(!silent)wpToast(gps.cu?'Rotta in alto: la mappa ruota e resta centrata su di te. Per esplorare la mappa torna a «Nord in alto».':'Nord in alto: la mappa è ferma.');}
-function orientPanel(){
- var bd=wpFrame('Orientamento della mappa');
- bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Con «Rotta in alto» la mappa ruota e la linea di rotta resta sempre verso l’alto. La mappa si blocca su di te: per spostarla torna a «Nord in alto». Puoi cambiare anche toccando la bussola in alto a destra.'}));
- bd.appendChild(stGrid([['north','Nord in alto (la mappa è ferma)'],['course','Rotta in alto (la mappa ruota)']],gps.cu?'course':'north',1,function(){return '';},function(id){setOrient(id);wpCloseP();}));}
+function baseNow(){return map.hasLayer(osm)?'osm':'sat';}
+function baseSet(id){
+ if(id==='osm'){if(map.hasLayer(sat))map.removeLayer(sat);if(!map.hasLayer(osm))osm.addTo(map);}
+ else{if(map.hasLayer(osm))map.removeLayer(osm);if(!map.hasLayer(sat))sat.addTo(map);}
+ try{localStorage.setItem('isobate_base',id);}catch(e){}}
+function mapPanel(){
+ var bd=wpFrame('Mappa',true);
+ function tit(t){bd.appendChild(wpH('div',{style:'margin:10px 0 4px;font-weight:700;font-size:14px',text:t}));}
+ tit('Orientamento');
+ bd.appendChild(wpH('p',{style:'margin:0 0 6px;color:#456;font-size:12px',text:'Con «Rotta in alto» la mappa ruota e si blocca su di te. Puoi cambiare anche toccando la bussola in alto a destra.'}));
+ bd.appendChild(stGrid([['north','Nord in alto'],['course','Rotta in alto']],gps.cu?'course':'north',2,function(){return '';},function(id){setOrient(id);}));
+ tit('Sfondo');
+ bd.appendChild(stGrid([['sat','Satellite'],['osm','Cartina geografica']],baseNow(),2,function(){return '';},function(id){baseSet(id);}));
+ tit('Trasparenza dei colori del fondale');
+ var cur=Math.round((parseFloat(map.getPane('bands').style.opacity)||0)*100),lab=wpH('span',{style:'float:right;font-weight:700',text:cur+'%'});
+ bd.appendChild(wpH('p',{style:'margin:0 0 4px;color:#456;font-size:12px'},['Verso sinistra i colori sono più trasparenti, verso destra più intensi.',lab]));
+ bd.appendChild(wpH('input',{type:'range',min:'0',max:'100',value:String(cur),style:'width:100%',on:{input:function(e){
+  var v=+e.target.value;map.getPane('bands').style.opacity=v/100;lab.textContent=v+'%';
+  try{localStorage.setItem('isobate_bandop',String(v));}catch(x){}}}}));}
 cmpEl=document.createElement('div');cmpEl.id='cmp';cmpEl.title='Orientamento della mappa (tocca per cambiare)';
 cmpEl.innerHTML='<svg width="30" height="30" viewBox="0 0 30 30"><path d="M15 3L21 16H9Z" fill="#e11d48"/><path d="M15 27L9 16H21Z" fill="#8a97a0"/><text x="15" y="12.8" text-anchor="middle" font-size="6.5" font-weight="800" font-family="Arial,sans-serif" fill="#ffffff">N</text></svg>';
 map.getContainer().appendChild(cmpEl);L.DomEvent.disableClickPropagation(cmpEl);
@@ -954,8 +970,8 @@ var wpP=document.createElement('div');wpP.id='wpp';document.body.appendChild(wpP
 function wpOpenP(){wpP.style.display='flex';if(!wpOpen){wpOpen=true;try{history.pushState({wp:1},'');}catch(e){}}}
 function wpCloseP(fromPop){wpP.style.display='none';if(wpOpen){wpOpen=false;if(!fromPop){try{if(history.state&&history.state.wp)history.back();}catch(e){}}}}
 window.addEventListener('popstate',function(){if(wpOpen)wpCloseP(true);});
-function wpFrame(title){
- wpP.innerHTML='';
+function wpFrame(title,sheet){
+ wpP.innerHTML='';wpP.className=sheet?'sheet':'';
  var bd=wpH('div',{class:'bd'});
  wpP.appendChild(wpH('div',{class:'bar'},[wpH('span',{text:title}),wpH('button',{text:'Chiudi',on:{click:function(){wpCloseP();}}})]));
  wpP.appendChild(bd);wpOpenP();return bd;}
@@ -1214,7 +1230,7 @@ var MenuCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
  trkBtn=item('Registra traccia',MNU_SVG.rec,function(){if(trkCur)trkStop();else trkStart();});
  item('Tracce',MNU_SVG.track,trkList);
  item('Unità di misura',MNU_SVG.units,unitsPanel);
- item('Orientamento mappa',MNU_SVG.orient,orientPanel);
+ item('Mappa',MNU_SVG.orient,mapPanel);
  item('Stile della barca',MNU_SVG.boat,boatPanel);
  item('Linea di rotta',MNU_SVG.line,linePanel);
  item('Linea della prua',MNU_SVG.bow,bowPanel);
