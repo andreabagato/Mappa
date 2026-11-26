@@ -33,7 +33,7 @@
  #mnub.open{background:#e3eefc;color:#1a73e8} #mnub.rec::after,#mnub.rec.open::after{content:'';position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#dc2626;border:2px solid #fff}
  #mnud{display:none;margin-top:6px;background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.55);overflow-y:auto;min-width:215px}
  .mnui{display:flex;align-items:center;gap:12px;padding:11px 14px;color:#12303a;font-size:15px;font-weight:600;text-decoration:none;border-bottom:1px solid #e3eaee;white-space:nowrap;cursor:pointer} .mnui:last-child{border-bottom:0} .mnui svg{flex:none;width:22px;height:22px} .mnui.rec{color:#dc2626}
- .gpsai svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))} .wpig.st2{grid-template-columns:repeat(2,1fr)} .wpig.st3{grid-template-columns:repeat(3,1fr)}
+ .gpsai svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))} .wpig.st4{grid-template-columns:repeat(4,1fr)} .wpig.st5{grid-template-columns:repeat(5,1fr)} .wpig.st2{grid-template-columns:repeat(2,1fr)} .wpig.st3{grid-template-columns:repeat(3,1fr)}
  #gpsrc{display:flex;align-items:center;justify-content:center;width:30px;height:30px;color:#0b5d73} #gpsrc.on{background:#e3eefc;color:#1a73e8}
  #gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:auto;cursor:pointer;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:13px;line-height:1.3}
  #gpsi small{display:block;font-weight:400;font-size:11px;opacity:.85}
@@ -48,8 +48,6 @@
  #wpt{position:absolute;top:10px;left:50px;right:50px;z-index:900;display:none;background:rgba(8,40,60,.95);color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.35}
  #wpt button{margin:4px 8px 0 0;padding:4px 10px;font-size:12px;background:#fff;color:#08414f}
  #wpp{position:fixed;left:0;top:0;right:0;bottom:0;z-index:3000;background:#f7fafb;display:none;flex-direction:column}
- #wpp.sheet{top:auto;max-height:48%;border-radius:14px 14px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.45)}
- #wpp.sheet .bd{min-height:0}
  #wpp .bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#08414f;color:#fff;font-weight:600}
  #wpp .bar button{margin:0;background:#fff;color:#08414f} #wpp .bd{flex:1;overflow-y:auto;padding:12px 14px}
  .wprow{border:1px solid #cfdde3;border-radius:8px;background:#fff;padding:8px 10px;margin:8px 0} .wprow small{display:block;color:#456}
@@ -689,7 +687,7 @@ function baseSet(id){
  else{if(map.hasLayer(osm))map.removeLayer(osm);if(!map.hasLayer(sat))sat.addTo(map);}
  try{localStorage.setItem('isobate_base',id);}catch(e){}}
 function mapPanel(){
- var bd=wpFrame('Mappa',true);
+ var bd=wpFrame('Mappa');
  function tit(t){bd.appendChild(wpH('div',{style:'margin:10px 0 4px;font-weight:700;font-size:14px',text:t}));}
  tit('Orientamento');
  bd.appendChild(wpH('p',{style:'margin:0 0 6px;color:#456;font-size:12px',text:'Con «Rotta in alto» la mappa ruota e si blocca su di te. Puoi cambiare anche toccando la bussola in alto a destra.'}));
@@ -970,8 +968,8 @@ var wpP=document.createElement('div');wpP.id='wpp';document.body.appendChild(wpP
 function wpOpenP(){wpP.style.display='flex';if(!wpOpen){wpOpen=true;try{history.pushState({wp:1},'');}catch(e){}}}
 function wpCloseP(fromPop){wpP.style.display='none';if(wpOpen){wpOpen=false;if(!fromPop){try{if(history.state&&history.state.wp)history.back();}catch(e){}}}}
 window.addEventListener('popstate',function(){if(wpOpen)wpCloseP(true);});
-function wpFrame(title,sheet){
- wpP.innerHTML='';wpP.className=sheet?'sheet':'';
+function wpFrame(title){
+ wpP.innerHTML='';
  var bd=wpH('div',{class:'bd'});
  wpP.appendChild(wpH('div',{class:'bar'},[wpH('span',{text:title}),wpH('button',{text:'Chiudi',on:{click:function(){wpCloseP();}}})]));
  wpP.appendChild(bd);wpOpenP();return bd;}
@@ -1067,17 +1065,35 @@ function trkText(){
  return '<div class="gpsr">● REC '+wpFmtDist(s.dist)+' · '+trkFmtDur((Date.now()-trkCur.t0)/1000)+((trkWarnP||trkWarnM||trkSaveFail)?' ⚠':'')+'</div>';}
 function trkUI(){if(trkBtn){trkBtn.className='mnui'+(trkCur?' rec':'');if(trkBtn._lab)trkBtn._lab.textContent=trkCur?'Ferma registrazione':'Registra traccia';}if(mnuB&&!menuOpen)mnuB.className=trkCur?'rec':'';}
 function trkLL(t){return t.pts.map(function(p){return [p[0],p[1]];});}
-function trkUndraw(id){if(trkLayers[id]){map.removeLayer(trkLayers[id]);delete trkLayers[id];}}
+var TRK_COLORS=[['#000000','Nero'],['#ffffff','Bianco'],['#2b7fff','Blu'],['#ff2a2a','Rosso'],['#ffe600','Giallo'],['#ff8a00','Arancione'],['#7dff00','Verde lime'],['#ff2fb3','Magenta'],['#00e5ff','Ciano'],['#9333ea','Viola']];
+var TRK_WS=[1,2,3,5],trkDef={color:'#000000',w:2},trkHalos={},trkLiveH=null;
+try{var tj=JSON.parse(localStorage.getItem('isobate_trkstyle')||'null');
+ if(tj){if(TRK_COLORS.some(function(c){return c[0]===tj.color;}))trkDef.color=tj.color;if(TRK_WS.indexOf(tj.w)>=0)trkDef.w=tj.w;}}catch(e){}
+function trkDefSave(){try{localStorage.setItem('isobate_trkstyle',JSON.stringify(trkDef));}catch(e){}}
+function trkStyleOf(t){
+ var c=t&&t.color,w=t&&t.w;
+ return {c:TRK_COLORS.some(function(x){return x[0]===c;})?c:trkDef.color,w:TRK_WS.indexOf(w)>=0?w:trkDef.w};}
+function trkHaloC(c){var r=parseInt(c.substr(1,2),16),g=parseInt(c.substr(3,2),16),b=parseInt(c.substr(5,2),16);return (0.299*r+0.587*g+0.114*b)<110?'#ffffff':'#0b2a3a';}
+function trkUndraw(id){
+ if(trkLayers[id]){map.removeLayer(trkLayers[id]);delete trkLayers[id];}
+ if(trkHalos[id]){map.removeLayer(trkHalos[id]);delete trkHalos[id];}}
+function trkRestyle(){
+ trks.forEach(trkDraw);
+ if(trkLive){var st=trkStyleOf(null);trkLive.setStyle({color:st.c,weight:st.w});if(trkLiveH)trkLiveH.setStyle({color:trkHaloC(st.c),weight:st.w+2.4});}}
 function trkDraw(t){
  trkUndraw(t.id);if(trkShowIds.indexOf(t.id)<0||t.pts.length<2)return;
- trkLayers[t.id]=L.polyline(trkLL(t),{renderer:gpsR,interactive:false,color:'#9333ea',weight:3,opacity:.75}).addTo(map);}
+ var st=trkStyleOf(t),ll=trkLL(t);
+ trkHalos[t.id]=L.polyline(ll,{renderer:gpsR,interactive:false,color:trkHaloC(st.c),weight:st.w+2.4,opacity:.5}).addTo(map);
+ trkLayers[t.id]=L.polyline(ll,{renderer:gpsR,interactive:false,color:st.c,weight:st.w,opacity:1}).addTo(map);}
 function trkStart(silent){
  if(trkCur)return;
  if(gps.watch===null)gpsStart();
  var now=Date.now(),d=new Date(now);
  trkWarnP=trkWarnM=trkWarnM2=trkSaveFail=false;
  trkCur={id:now.toString(36)+Math.random().toString(36).slice(2,6),name:'Traccia '+d.toLocaleDateString('it-IT')+' '+wpPad(d.getHours())+':'+wpPad(d.getMinutes()),t0:now,pts:[]};
- trkLive=L.polyline([],{renderer:gpsR,interactive:false,color:'#7c3aed',weight:4,opacity:.9}).addTo(map);
+ var ls0=trkStyleOf(null);
+ trkLiveH=L.polyline([],{renderer:gpsR,interactive:false,color:trkHaloC(ls0.c),weight:ls0.w+2.4,opacity:.5}).addTo(map);
+ trkLive=L.polyline([],{renderer:gpsR,interactive:false,color:ls0.c,weight:ls0.w,opacity:1}).addTo(map);
  trkUI();trkSaveCur();
  if(gps.c){trkPoint(gps.c);gpsRender();}
  if(!silent)wpToast('Registrazione avviata. Tieni l’app aperta e lo schermo acceso: a schermo spento il telefono non registra.');
@@ -1096,13 +1112,14 @@ function trkPoint(c){
  if(n>=TRK_MAX){trkRoll();return;}
  var sp=(typeof c.speed==='number'&&isFinite(c.speed)&&c.speed>=0)?+c.speed.toFixed(1):null;
  p.push([la,lo,Math.round((Date.now()-trkCur.t0)/1000),sp]);
- if(trkLive)trkLive.addLatLng(L.latLng(la,lo));
+ if(trkLive){var ll1=L.latLng(la,lo);if(trkLiveH)trkLiveH.addLatLng(ll1);trkLive.addLatLng(ll1);}
  if(!trkWarnP&&p.length>=TRK_MAX*0.8){trkWarnP=true;trkAlert('La traccia è all’80% del limite ('+p.length+' di '+TRK_MAX+' punti). Al limite si chiude e ne parte un’altra in automatico.');}
  if(p.length%15===0){trkSaveCur();trkCheckMem();}}
 function trkStop(){
  if(!trkCur)return;
  var t=trkCur;trkCur=null;
  if(trkLive){map.removeLayer(trkLive);trkLive=null;}
+ if(trkLiveH){map.removeLayer(trkLiveH);trkLiveH=null;}
  try{localStorage.removeItem(TRK_CUR);}catch(e){}
  trkUI();
  if(t.pts.length<2){wpToast('Traccia troppo corta: non salvata.');if(gps.c)gpsRender();return;}
@@ -1151,6 +1168,21 @@ function trkDownloadAll(){
  var d=new Date();trkSaveFile('isobate-tracce-'+d.getFullYear()+wpPad(d.getMonth()+1)+wpPad(d.getDate())+'.gpx',trkGpxAll(trks.slice().sort(function(a,b){return a.t0-b.t0;})));}
 function trkShare(t){
  try{var f=new File([trkGpx(t)],trkFileName(t),{type:'application/gpx+xml'});navigator.share({files:[f],title:t.name}).catch(function(){});}catch(e){trkDownload(t);}}
+// stile delle tracce
+function trkSwatch(hex){return '<svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="'+hex+'" stroke="#ffffff" stroke-width="2"/><circle cx="15" cy="15" r="13.6" fill="none" stroke="#7a8a93" stroke-width="1"/></svg>';}
+function trkWCell(n){return '<svg width="46" height="22" viewBox="0 0 46 22"><line x1="5" y1="11" x2="41" y2="11" stroke="#12263a" stroke-width="'+n+'" stroke-linecap="round"/></svg>';}
+function trkColorGrid(cur,pick){return stGrid(TRK_COLORS,cur,5,function(it){return trkSwatch(it[0]);},pick);}
+function trkWGrid(cur,pick){return stGrid(TRK_WS.map(function(n){return [String(n),n+' px'];}),String(cur),4,function(it){return trkWCell(+it[0]);},function(id){pick(+id);});}
+function trkStylePanel(id){
+ var t=trkGet(id);if(!t)return;
+ var bd=wpFrame('Stile della traccia');
+ function tit(x){bd.appendChild(wpH('div',{style:'margin:12px 0 4px;font-weight:700;font-size:14px',text:x}));}
+ bd.appendChild(wpH('b',{text:t.name}));
+ tit('Colore');bd.appendChild(trkColorGrid(trkStyleOf(t).c,function(c){t.color=c;trkSave();trkDraw(t);}));
+ tit('Spessore');bd.appendChild(trkWGrid(trkStyleOf(t).w,function(n){t.w=n;trkSave();trkDraw(t);}));
+ bd.appendChild(wpH('div',{style:'margin-top:14px'},[
+  wpH('button',{text:'Usa lo stile predefinito',style:'background:#6b7c85',on:{click:function(){delete t.color;delete t.w;trkSave();trkDraw(t);trkStylePanel(id);}}}),
+  wpH('button',{text:'Torna alle tracce',style:'margin-left:6px',on:{click:function(){trkList();}}})]));}
 // storico
 function trkList(){
  var bd=wpFrame('Tracce ('+trks.length+')'),u=trkUsage(),pc=Math.min(100,Math.round(u/TRK_LIM*100));
@@ -1174,6 +1206,9 @@ function trkList(){
  bd.appendChild(wpH('div',null,[wpH('button',{text:'Esporta tutte (GPX)',on:{click:trkDownloadAll}}),wpH('button',{text:'Importa GPX',style:'margin-left:6px',on:{click:function(){inp.click();}}})]));
  bd.appendChild(inp);
  bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:'Le tracce stanno nei dati del browser di questo telefono: se cancelli i dati del sito vanno perse. Esporta il GPX per averne una copia. Registra solo con l’app aperta e lo schermo acceso.'}));
+ bd.appendChild(wpH('div',{style:'margin:12px 0 4px;font-weight:700;font-size:14px',text:'Stile predefinito delle tracce (nero 2 px di base)'}));
+ bd.appendChild(trkColorGrid(trkDef.color,function(id){trkDef.color=id;trkDefSave();trkRestyle();paint();}));
+ bd.appendChild(trkWGrid(trkDef.w,function(n){trkDef.w=n;trkDefSave();trkRestyle();paint();}));
  var q=wpH('input',{type:'text',placeholder:'Cerca per nome',style:'margin:6px 0'}),box=wpH('div');
  if(trks.length)bd.appendChild(q);
  bd.appendChild(box);
@@ -1183,10 +1218,12 @@ function trkList(){
   if(!l.length){box.appendChild(wpH('p',{text:f?'Nessuna traccia con questo nome.':'Nessuna traccia. Premi il pulsante con il pallino per iniziare a registrare.'}));return;}
   l.forEach(function(t){
    var shown=trkShowIds.indexOf(t.id)>=0;
-   var row=wpH('div',{class:'wprow'},[wpH('b',{text:t.name}),wpH('small',{text:wpFmtDate(t.t0)+' · '+trkSummary(t)+' · '+t.pts.length+' punti · '+trkFmtSize(t.pts.length*29)})]);
+   var sty=trkStyleOf(t),dot=wpH('span',{style:'flex:none;width:28px;height:'+sty.w+'px;background:'+sty.c+';outline:1px solid #7a8a93'});
+   var row=wpH('div',{class:'wprow'},[wpH('div',{style:'display:flex;align-items:center;gap:8px'},[dot,wpH('b',{text:t.name})]),wpH('small',{text:wpFmtDate(t.t0)+' · '+trkSummary(t)+' · '+t.pts.length+' punti · '+trkFmtSize(t.pts.length*29)})]);
    var bt=[
     wpH('button',{text:shown?'Nascondi':'Mostra',on:{click:function(){var i=trkShowIds.indexOf(t.id);if(i>=0)trkShowIds.splice(i,1);else trkShowIds.push(t.id);trkSave();trkDraw(t);paint();}}}),
     wpH('button',{text:'Centra',on:{click:function(){if(trkShowIds.indexOf(t.id)<0){trkShowIds.push(t.id);trkSave();trkDraw(t);}wpCloseP();map.fitBounds(trkLL(t),{padding:[40,40]});}}}),
+    wpH('button',{text:'Colore',on:{click:function(){trkStylePanel(t.id);}}}),
     wpH('button',{text:'Rinomina',on:{click:function(){trkEdit(t.id);}}}),
     wpH('button',{text:'Esporta GPX',on:{click:function(){trkDownload(t);}}})];
    if(wpCanShare())bt.push(wpH('button',{text:'Condividi',on:{click:function(){trkShare(t);}}}));
