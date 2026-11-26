@@ -548,13 +548,15 @@ var LINES=lnBuild(false),BOWLINES=lnBuild(true);
 var LINE_MAP={},BOWLINE_MAP={};LINES.forEach(function(l){LINE_MAP[l[0]]=l;});BOWLINES.forEach(function(l){BOWLINE_MAP[l[0]]=l;});
 var LN_OLD={blue:'blue-s',blue2:'blue-t',red:'red-s',yellow:'yellow-s',white:'white-s',orange:'orange-t',lime:'lime-s',magenta:'magenta-t',cyand:'cyan-t',redd:'red-t'};
 var LN_THR=['never','std','5','10','15'];
-gps.boat='arrow';gps.lineId='blue-s';gps.bowId='white-s';gps.lineOn=true;gps.lineThr='std';gps.lastH=null;gps.zooming=false;gps.pend=false;
+var BOW_THR=['never','2','5','10','20'];
+gps.boat='arrow';gps.lineId='blue-s';gps.bowId='white-s';gps.lineOn=true;gps.lineThr='std';gps.bowThr='never';gps.lastH=null;gps.zooming=false;gps.pend=false;
 try{
  var sb=localStorage.getItem('isobate_boat');if(sb&&BOAT_MAP[sb])gps.boat=sb;
  var sl=localStorage.getItem('isobate_line');if(sl&&LN_OLD[sl])sl=LN_OLD[sl];if(sl&&LINE_MAP[sl])gps.lineId=sl;
  var sw=localStorage.getItem('isobate_bowstyle');if(sw&&BOWLINE_MAP[sw])gps.bowId=sw;
  gps.lineOn=localStorage.getItem('isobate_lineon')!=='0';
  var st=localStorage.getItem('isobate_linethr');if(st&&LN_THR.indexOf(st)>=0)gps.lineThr=st;
+ var bt=localStorage.getItem('isobate_bowthr');if(bt&&BOW_THR.indexOf(bt)>=0)gps.bowThr=bt;
 }catch(e){}
 function gpsLS(){return LINE_MAP[gps.lineId]||LINES[0];}
 function bowLS(){return BOWLINE_MAP[gps.bowId]||BOWLINES[0];}
@@ -565,7 +567,7 @@ function gpsLineH(v,h){
  if(h===null)return null;
  if(t==='std')return h;
  return (v!==null&&v>=(+t)/unitSpeed()[2])?h:null;}
-function gpsRedo(){if(gps.dot&&gps.c&&gps.last){var vh=gpsVec(gps.c);gpsMove(gps.last,vh.v,vh.h);}}
+function gpsRedo(){if(gps.dot&&gps.c&&gps.last){var vh=gpsVec(gps.c);gpsMove(gps.last,vh.v,vh.h);}bowDraw();}
 function gpsBoatRefresh(){
  if(gps.arrow){map.removeLayer(gps.arrow);gps.arrow=null;}
  if(gps.dot&&gps.c&&gps.last){var vh=gpsVec(gps.c);gpsMove(gps.last,vh.v,vh.h);}}
@@ -588,16 +590,39 @@ function boatPanel(){
 function lnPrev(l){
  var d=l[6]?' stroke-dasharray="'+l[6]+'"':'';
  return '<svg width="100%" height="34" viewBox="0 0 120 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><rect width="60" height="34" fill="#0a2250"/><rect x="60" width="60" height="34" fill="#d9d2b8"/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[4]+'" stroke-width="'+l[5]+'" stroke-opacity=".6"'+d+'/><line x1="6" y1="17" x2="114" y2="17" stroke="'+l[2]+'" stroke-width="'+l[3]+'"'+d+'/></svg>';}
-function linePanel(){
- var bd=wpFrame('Linea di rotta'),us=unitSpeed();
- bd.appendChild(wpH('button',{text:'Linea di rotta: '+(gps.lineOn?'ON':'OFF'),style:'width:100%;margin:0 0 12px;font-size:16px;background:'+(gps.lineOn?'#16a34a':'#6b7c85'),on:{click:function(){
-  gps.lineOn=!gps.lineOn;try{localStorage.setItem('isobate_lineon',gps.lineOn?'1':'0');}catch(e){}gpsRedo();linePanel();}}}));
- bd.appendChild(wpH('div',{style:'margin:6px 0 2px;font-weight:700;font-size:14px',text:'Togli la linea quando la velocità scende sotto'}));
- bd.appendChild(wpH('p',{style:'margin:0 0 6px;color:#456;font-size:12px',text:'«Mai»: la linea resta sempre, anche da fermo. I valori 5, 10 e 15 sono nell’unità di velocità scelta ('+us[3]+'). La freccia resta comunque visibile.'}));
- bd.appendChild(stGrid([['never','Mai'],['std','Standard 0,3 nodi'],['5','5 '+us[3]],['10','10 '+us[3]],['15','15 '+us[3]]],gps.lineThr,3,function(){return '';},function(id){
-  gps.lineThr=id;try{localStorage.setItem('isobate_linethr',id);}catch(e){}gpsRedo();}));
+function lnPanelBase(bd,c){
+ bd.appendChild(wpH('button',{text:c.name+': '+(c.on?'ON':'OFF'),style:'width:100%;margin:0 0 12px;font-size:16px;background:'+(c.on?'#16a34a':'#6b7c85'),on:{click:c.toggle}}));
+ bd.appendChild(wpH('div',{style:'margin:6px 0 2px;font-weight:700;font-size:14px',text:c.thrTitle}));
+ bd.appendChild(wpH('p',{style:'margin:0 0 6px;color:#456;font-size:12px',text:c.thrNote}));
+ bd.appendChild(stGrid(c.thr,c.thrCur,3,function(){return '';},c.thrPick));
  bd.appendChild(wpH('div',{style:'margin:14px 0 4px;font-weight:700;font-size:14px',text:'Colore e spessore'}));
- bd.appendChild(stGrid(LINES,gps.lineId,2,lnPrev,function(id){gps.lineId=id;try{localStorage.setItem('isobate_line',id);}catch(e){}gpsLineRefresh();wpCloseP();}));}
+ bd.appendChild(stGrid(c.styles,c.styleCur,2,lnPrev,c.stylePick));}
+function linePanel(){
+ var bd=wpFrame('Linea di rotta'),u=unitSpeed()[3];
+ lnPanelBase(bd,{
+  name:'Linea di rotta',on:gps.lineOn,
+  toggle:function(){gps.lineOn=!gps.lineOn;try{localStorage.setItem('isobate_lineon',gps.lineOn?'1':'0');}catch(e){}gpsRedo();linePanel();},
+  thrTitle:'Togli la linea quando la velocità scende sotto',
+  thrNote:'«Mai»: la linea resta sempre, anche da fermo. I valori 5, 10 e 15 sono nell’unità di velocità scelta ('+u+'). La freccia resta comunque visibile.',
+  thr:[['never','Mai'],['std','Standard 0,3 nodi'],['5','5 '+u],['10','10 '+u],['15','15 '+u]],thrCur:gps.lineThr,
+  thrPick:function(id){gps.lineThr=id;try{localStorage.setItem('isobate_linethr',id);}catch(e){}gpsRedo();},
+  styles:LINES,styleCur:gps.lineId,
+  stylePick:function(id){gps.lineId=id;try{localStorage.setItem('isobate_line',id);}catch(e){}gpsLineRefresh();wpCloseP();}});}
+function bowPanel(){
+ var bd=wpFrame('Linea della prua'),u=unitSpeed()[3],h=bowHeading();
+ lnPanelBase(bd,{
+  name:'Linea della prua',on:gps.bowOn,
+  toggle:function(){bowSet(!gps.bowOn);bowPanel();},
+  thrTitle:'Spegni la linea quando la velocità sale sopra',
+  thrNote:'«Mai»: la linea resta sempre accesa. Ad alta velocità prua e rotta coincidono, quindi la linea si spegne da sola e ricompare appena rallenti. I valori sono nell’unità di velocità scelta ('+u+').',
+  thr:[['never','Mai'],['2','2 '+u],['5','5 '+u],['10','10 '+u],['20','20 '+u]],thrCur:gps.bowThr,
+  thrPick:function(id){gps.bowThr=id;try{localStorage.setItem('isobate_bowthr',id);}catch(e){}bowDraw();},
+  styles:BOWLINES,styleCur:gps.bowId,
+  stylePick:function(id){gps.bowId=id;try{localStorage.setItem('isobate_bowstyle',id);}catch(e){}bowLineRefresh();wpCloseP();}});
+ bd.appendChild(wpH('div',{style:'margin:18px 0 4px;font-weight:700;font-size:14px',text:'Bussola e calibrazione'}));
+ bd.appendChild(wpH('small',{style:'display:block;margin:4px 0 10px;color:#456',text:!gps.bowOn?'Linea spenta.':(h===null?'Bussola: ancora nessun dato…':'Bussola attiva · prua '+Math.round(h)+'° · correzione '+Math.round(gps.bowOff)+'°'+(bowAutoOff()?' · linea spenta in automatico: sei sopra la soglia':''))}));
+ bd.appendChild(wpH('div',null,[wpH('button',{text:'Calibra la prua adesso',on:{click:function(){bowCalibrate();}}}),wpH('button',{text:'Azzera calibrazione',style:'margin-left:6px;background:#6b7c85',on:{click:function(){bowReset();bowPanel();}}})]));
+ bd.appendChild(wpH('small',{style:'display:block;margin-top:12px;color:#456;line-height:1.4',text:'La linea mostra la direzione in cui punta davvero la barca, letta dalla bussola del telefono: a bassa velocità, con vento o corrente forti è diversa dalla rotta. Fissa il telefono in verticale con il retro verso la prua, oppure piatto con il bordo alto verso la prua, lontano da motori e metalli. La bussola indica il nord magnetico: per correggere l’errore e la posizione del telefono, naviga dritto a più di 3 nodi e tocca «Calibra».'}));}
 // --- UNITA' DI MISURA ---
 var GPS_MINV=0.1543;
 var UNITS_SPEED=[['kn','Nodi (miglia nautiche/ora)',1.943844,'nodi'],['kmh','Chilometri/ora',3.6,'km/h'],['mph','Miglia/ora (terrestri)',2.236936,'mi/h']];
@@ -681,8 +706,12 @@ function bowRaw(ev){
  return (Math.atan2(Vx,Vy)/r+360)%360;}
 function bowHeading(){return gps.bowC===null?null:(gps.bowC+gps.bowOff+720)%360;}
 function bowClear(){if(gps.bow){map.removeLayer(gps.bow);map.removeLayer(gps.bowHalo);gps.bow=gps.bowHalo=null;}}
+function bowAutoOff(){
+ var t=gps.bowThr;if(t==='never'||!gps.c)return false;
+ var v=gpsVec(gps.c).v;return v!==null&&v>=(+t)/unitSpeed()[2];}
 function bowDraw(){
  if(!gps.bowOn||gps.zooming)return;
+ if(bowAutoOff()){bowClear();return;}
  var h=bowHeading();
  if(h===null||!gps.last){bowClear();return;}
  var pts=[gps.last,gpsShaftEnd(gps.last,h)];
@@ -725,17 +754,6 @@ function bowCalibrate(){
  try{localStorage.setItem('isobate_bowoff',String(gps.bowOff));}catch(e){}
  bowDraw();wpToast('Prua calibrata: correzione di '+Math.round(gps.bowOff)+'°.');}
 function bowReset(){gps.bowOff=0;try{localStorage.setItem('isobate_bowoff','0');}catch(e){}bowDraw();wpToast('Calibrazione azzerata.');}
-function bowPanel(){
- var bd=wpFrame('Linea della prua'),h=bowHeading();
- bd.appendChild(wpH('p',{style:'margin:0 0 8px;color:#456;font-size:13px',text:'Mostra una seconda linea tratteggiata con la direzione in cui punta davvero la barca, letta dalla bussola del telefono. A bassa velocità, con vento o corrente forti è diversa dalla rotta.'}));
- bd.appendChild(wpH('button',{text:gps.bowOn?'Disattiva la linea della prua':'Attiva la linea della prua',on:{click:function(){bowSet(!gps.bowOn);bowPanel();}}}));
- bd.appendChild(wpH('small',{style:'display:block;margin:10px 0;color:#456',text:!gps.bowOn?'Linea spenta.':(h===null?'Bussola: ancora nessun dato…':'Bussola attiva · prua '+Math.round(h)+'° · correzione '+Math.round(gps.bowOff)+'°')}));
- bd.appendChild(wpH('div',null,[wpH('button',{text:'Calibra la prua adesso',on:{click:function(){bowCalibrate();}}}),wpH('button',{text:'Azzera calibrazione',style:'margin-left:6px;background:#6b7c85',on:{click:function(){bowReset();bowPanel();}}})]));
- bd.appendChild(wpH('div',{style:'margin:14px 0 4px;font-weight:700;font-size:14px',text:'Colore e spessore (sempre tratteggiata)'}));
- bd.appendChild(stGrid(BOWLINES,gps.bowId,2,lnPrev,function(id){gps.bowId=id;try{localStorage.setItem('isobate_bowstyle',id);}catch(e){}bowLineRefresh();}));
- bd.appendChild(wpH('small',{style:'display:block;margin-top:12px;color:#456;line-height:1.4',text:'Fissa il telefono: in verticale con il retro verso la prua, oppure piatto con il bordo alto verso la prua. Tienilo lontano da motori e metalli. La bussola indica il nord magnetico: per correggere l’errore e la posizione del telefono, naviga dritto a più di 3 nodi e tocca «Calibra».'}));}
-
-
 // --- WAYPOINT ---
 var WP_KEY='isobate_wp',wp=[],wpShow=true,wpLayer={},wpOpen=false;
 function wpEsc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
