@@ -26,7 +26,7 @@
  #xh svg{position:absolute;left:-18px;top:-18px}
  #xht{position:absolute;left:6px;top:5px;white-space:nowrap;font-size:11px;font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000;pointer-events:none}
  #rot{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:50% 50%;transition:transform .35s linear}
- #cmp{position:absolute;right:10px;top:64px;z-index:800;width:38px;height:38px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+ #cmp{position:absolute;right:10px;top:10px;z-index:800;width:38px;height:38px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;cursor:pointer}
  #cmp svg{transition:transform .35s linear} .wpig.st1{grid-template-columns:1fr}
  #wpnew{display:flex;align-items:center;justify-content:center;width:34px;height:34px;color:#e8590c}
  .mnuw{position:relative} #mnub{display:flex;align-items:center;justify-content:center;width:34px;height:34px;color:#0b5d73;background:#fff;border:2px solid rgba(0,0,0,.2);border-radius:5px;background-clip:padding-box;position:relative;text-decoration:none}
@@ -85,7 +85,6 @@
 var map=L.map('map').setView([40.2,12.6],7);
 var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Immagini © Esri'}).addTo(map);
 var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
-L.control.layers({'Satellite':sat,'Mappa':osm},null).addTo(map);
 try{if(localStorage.getItem('isobate_base')==='osm'){map.removeLayer(sat);osm.addTo(map);}}catch(e){}
 map.attributionControl.addAttribution('Batimetria © EMODnet · costa © OpenStreetMap');
 map.createPane('bands').style.zIndex=350; map.getPane('bands').style.opacity=(function(){try{var q=localStorage.getItem('isobate_bandop');if(q!==null&&q!==''&&+q>=0&&+q<=100)return +q/100;}catch(e){}return 0.5;})();
