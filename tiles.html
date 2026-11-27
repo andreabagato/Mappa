@@ -87,13 +87,17 @@ label{display:flex;gap:8px;align-items:center;margin:6px 0}
   <button id="redraw">Ridisegna</button>
  </div>
  <div id="g_bands"><label><input type="checkbox" id="bands" checked> Colora per profondità</label></div>
- <div id="g_dev">
+ <div id="g_iso">
   <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
   <label><input type="checkbox" id="lbl" checked> Scritte di profondità sulle isobate</label>
+ </div>
+ <div id="g_dev">
   <label><input type="checkbox" id="dbg"> Mostra i bordi dei tasselli (diagnosi)</label>
   <div id="status">Carico l'elenco dei tasselli…</div>
  </div>
  <div id="g_src">
+  <h2>Crediti</h2>
+  <p>Batimetria © EMODnet<br>Immagini satellitari © Esri<br>Cartografia e costa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors<br>Mappa realizzata con <a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a></p>
   <h2>Livelli di dettaglio</h2>
   <p>Le zone <b>tratteggiate</b> sono vicino alla costa dove EMODnet non ha dati: la profondità è solo ipotizzata dai punti vicini.</p>
   <p>Si caricano da soli in base allo zoom: base su tutto il mare, poi medio (da zoom 8) e fine (da zoom 10), solo dove il fondale è meno profondo.</p>
@@ -113,11 +117,10 @@ function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
 function escHtml(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function pad2(n){return (n<10?'0':'')+n;}
 
-var map=L.map('map').setView([40.2,12.6],7);
+var map=L.map('map',{attributionControl:false}).setView([40.2,12.6],7);
 var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Immagini © Esri'}).addTo(map);
 var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
 if(lsGet('isobate_base')==='osm'){map.removeLayer(sat);osm.addTo(map);}
-map.attributionControl.addAttribution('Batimetria © EMODnet · costa © OpenStreetMap');
 map.createPane('bands').style.zIndex=350;
 var bandOpSaved=lsGet('isobate_bandop');
 map.getPane('bands').style.opacity=(bandOpSaved!==null&&bandOpSaved!==''&&+bandOpSaved>=0&&+bandOpSaved<=100)?(+bandOpSaved/100):0.5;
@@ -812,13 +815,13 @@ function mapPanel(){
  var cur=Math.round((parseFloat(map.getPane('bands').style.opacity)||0)*100),lab=wpH('span',{style:'float:right;font-weight:700',text:cur+'%'});
  bd.appendChild(wpH('p',{style:'margin:0 0 4px;color:#456;font-size:12px'},['Verso sinistra i colori sono più trasparenti, verso destra più intensi.',lab]));
  bd.appendChild(wpH('input',{type:'range',min:'0',max:'100',value:String(cur),style:'width:100%',on:{input:function(e){var v=+e.target.value;map.getPane('bands').style.opacity=v/100;lab.textContent=v+'%';lsSet('isobate_bandop',String(v));}}}));
- tit('Linee batimetriche');stashPut(bd,'g_lines');
+ tit('Linee batimetriche');stashPut(bd,'g_iso');
  tit('Colorazione');stashPut(bd,'g_bands');
 }
 function devPanel(){
  var bd=wpFrame('Sviluppatore');
  bd.appendChild(wpH('p',{style:'margin:0 0 6px;color:#456;font-size:12px',text:'Impostazioni di sviluppo: nell’app rilasciata questa scheda non sarà presente.'}));
- stashPut(bd,'g_dev');
+ stashPut(bd,'g_lines');stashPut(bd,'g_dev');
 }
 function srcPanel(){
  var bd=wpFrame('Fonti');
@@ -1107,7 +1110,7 @@ var wpP=document.createElement('div');wpP.id='wpp';document.body.appendChild(wpP
 function wpOpenP(){wpP.style.display='flex';if(!wpOpen){wpOpen=true;try{history.pushState({wp:1},'');}catch(e){}}}
 function wpCloseP(fromPop){wpP.style.display='none';if(wpOpen){wpOpen=false;if(!fromPop){try{if(history.state&&history.state.wp)history.back();}catch(e){}}}}
 window.addEventListener('popstate',function(){if(wpOpen)wpCloseP(true);});
-var STASH=['g_lines','g_bands','g_dev','g_src'];
+var STASH=['g_lines','g_iso','g_bands','g_dev','g_src'];
 function stashBack(){var h=document.getElementById('stash');if(!h)return;STASH.forEach(function(id){var e=document.getElementById(id);if(e&&e.parentNode!==h)h.appendChild(e);});}
 function stashPut(bd,id){var e=document.getElementById(id);if(e)bd.appendChild(e);}
 function wpFrame(title){
