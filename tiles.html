@@ -26,8 +26,11 @@ label{display:flex;gap:8px;align-items:center;margin:6px 0}
 .warn{margin-top:14px;padding:8px 10px;border-radius:6px;background:#fff4d6;color:#6b4b00;font-size:calc(12.5px*var(--fs))}
 .leaflet-tooltip.d{font-weight:700;background:#08414f;color:#fff;border:0}
 #xh{position:absolute;left:50%;top:50%;width:0;height:0;z-index:700;pointer-events:none}
-#xh svg{position:absolute;left:-18px;top:-18px}
-#xht{position:absolute;left:6px;top:5px;white-space:nowrap;font-size:calc(11px*var(--fs));font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000;pointer-events:none}
+#xh svg{position:absolute;left:-54px;top:-54px}
+#xh,#xhc{transition:opacity .4s}
+#xht{position:absolute;left:16px;top:7px;white-space:nowrap;font-size:calc(11px*var(--fs));font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000;pointer-events:none}
+#xhc{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);z-index:800;white-space:nowrap;pointer-events:none;font-size:calc(11px*var(--fs));font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000}
+#gpsc{margin-top:2px;font-size:calc(11px*var(--fs));font-weight:600;opacity:.9;white-space:nowrap}
 #rot{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:50% 50%;transition:transform .35s linear}
 #cmp{position:absolute;right:10px;top:11px;z-index:800;width:42px;height:42px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;cursor:pointer}
 #cmp svg{width:33px;height:33px;transition:transform .35s linear}
@@ -46,7 +49,7 @@ div.leaflet-control-zoom a{width:33px!important;height:33px!important;line-heigh
 .mnui:last-child{border-bottom:0}
 .mnui svg{flex:none;width:22px;height:22px}
 .mnui.rec{color:#dc2626}
-#gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:auto;cursor:pointer;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:calc(13px*var(--fs));line-height:1.3}
+#gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:auto;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:calc(13px*var(--fs));line-height:1.3}
 #gpsi small{display:block;font-weight:400;font-size:calc(11px*var(--fs));opacity:.85}
 #gpsv{font-size:calc(22px*var(--fs));font-weight:700;line-height:1.2;margin-bottom:2px}
 #gpsv small{display:inline;font-size:calc(12px*var(--fs));font-weight:400}
@@ -500,9 +503,10 @@ map.on('click',function(e){
 });
 
 var xhEl=document.createElement('div');xhEl.id='xh';xhEl.style.display='block';
-xhEl.innerHTML='<svg width="36" height="36" viewBox="0 0 36 36"><path d="M18 2v12M18 22v12M2 18h12M22 18h12" stroke="#000" stroke-width="2.8" stroke-linecap="round" opacity=".45" fill="none"/><path d="M18 2v12M18 22v12M2 18h12M22 18h12" stroke="#fff" stroke-width="1.2" stroke-linecap="round" fill="none"/><circle cx="18" cy="18" r="1.2" fill="#fff"/></svg><div id="xht"></div>';
+xhEl.innerHTML='<svg width="108" height="108" viewBox="0 0 108 108"><path d="M54 6v36M54 66v36M6 54h36M66 54h36" stroke="#000" stroke-width="2.8" stroke-linecap="round" opacity=".45" fill="none"/><path d="M54 6v36M54 66v36M6 54h36M66 54h36" stroke="#fff" stroke-width="1.2" stroke-linecap="round" fill="none"/><circle cx="54" cy="54" r="1.2" fill="#fff"/></svg><div id="xht"></div>';
 map.getContainer().appendChild(xhEl);
 var xht=document.getElementById('xht'),xhTimer=0;
+var xhc=document.createElement('div');xhc.id='xhc';map.getContainer().appendChild(xhc);
 function xhText(p){
  if(!p||p.none)return 'Nessun dato<small>in questo punto</small>';
  if(p.land===true)return 'Terraferma';
@@ -516,9 +520,15 @@ function xhShort(p){
  if(p.f>0)return estFmt(p.f);
  return 'N/A';
 }
-function updXh(){xhTimer=0;var c=map.getCenter();xht.textContent=xhShort(probe(c.lat,c.lng));}
+function updXh(){xhTimer=0;var c=map.getCenter();xht.textContent=xhShort(probe(c.lat,c.lng));xhc.textContent=coordFmt(c.lat,c.lng);}
 function schedXh(){if(!xhTimer)xhTimer=setTimeout(updXh,120);}
 map.on('move zoom moveend zoomend',schedXh);
+var xhHideT=0;
+function xhShow(on){xhEl.style.opacity=on?'1':'0';xhc.style.opacity=on?'1':'0';}
+function xhWake(){xhShow(true);clearTimeout(xhHideT);xhHideT=setTimeout(function(){xhShow(false);},10000);}
+map.on('dragstart drag zoomstart zoomend',xhWake);
+map.getContainer().addEventListener('pointerdown',xhWake,{passive:true});
+xhWake();schedXh();
 document.getElementById('lbl').onchange=function(){lsSet('iso_lbl',this.checked?'1':'0');render();};
 if(lsGet('iso_lbl')==='0')document.getElementById('lbl').checked=false;
 document.getElementById('redraw').onclick=function(){for(var k in store)store[k].geom=null;render();};
@@ -531,7 +541,7 @@ var gpsInfo=document.createElement('div');gpsInfo.id='gpsi';map.getContainer().a
 L.DomEvent.disableClickPropagation(gpsInfo);
 L.DomEvent.on(gpsInfo,'click',function(ev){
  var t=ev&&ev.target;if(t&&t.getAttribute&&t.getAttribute('data-x')){gps.goto=null;gps.arrived=false;wpGoUpdate();if(gps.c)gpsRender();return;}
- if(!gps.c)return;var ks=UNITS_SPEED.map(function(u){return u[0];});units.speed=ks[(ks.indexOf(units.speed)+1)%ks.length];unitsSave();gpsRender();
+
 });
 (function(){
  var r=document.createElement('a');
@@ -594,7 +604,7 @@ function gpsRender(){
  var vh=gpsVec(c),ac=c.accuracy||0,us=unitSpeed(),u=us[3],k=us[2];
  var vs=vh.v===null?'—':(vh.v<GPS_MINV?0:vh.v*k).toFixed(1).replace('.',',');
  var rot=vh.h!==null?' · '+Math.round(vh.h)+'° '+GPS_DIR[Math.round(vh.h/45)%8]:'';
- gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div>'+wpGoText()+trkText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(probe(c.latitude,c.longitude))+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));
+ gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div><div id="gpsc">'+coordFmt(c.latitude,c.longitude)+'</div>'+wpGoText()+trkText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(probe(c.latitude,c.longitude))+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));
 }
 function gpsLayers(){
  var c=gps.c,ll=gps.last,ac=c.accuracy||0;
@@ -753,8 +763,9 @@ var UNITS_SPEED=[['kn','kn',1.943844,'kn'],['kmh','km/h',3.6,'km/h'],['mph','mph
 var UNITS_DIST=[['nm','NM'],['km','km'],['mi','mi']];
 var UNITS_DEPTH=[['m','m'],['ft','ft'],['fm','fm']];
 var UNITS_TEMP=[['c','°C'],['f','°F']];
-var UNIT_SETS={speed:UNITS_SPEED,dist:UNITS_DIST,depth:UNITS_DEPTH,temp:UNITS_TEMP,wind:UNITS_SPEED};
-var units={speed:'kn',dist:'nm',depth:'m',temp:'c',wind:'kn'};
+var UNITS_COORD=[['dd','DD'],['ddm','DDM'],['dms','DMS']];
+var UNIT_SETS={speed:UNITS_SPEED,dist:UNITS_DIST,depth:UNITS_DEPTH,temp:UNITS_TEMP,wind:UNITS_SPEED,coord:UNITS_COORD};
+var units={speed:'kn',dist:'nm',depth:'m',temp:'c',wind:'kn',coord:'dd'};
 try{
  var uj=JSON.parse(lsGet('isobate_units')||'null');
  if(uj)for(var uk in UNIT_SETS)if(UNIT_SETS[uk].some(function(u){return u[0]===uj[uk];}))units[uk]=uj[uk];
@@ -766,6 +777,13 @@ function depthFmt(d){
  return d<5?('<'+Math.round(5*k)+l):(Math.round(d*k)+l);
 }
 function tempFmt(c){return units.temp==='f'?Math.round(c*1.8+32)+' °F':Math.round(c)+' °C';}
+function coordPart(v,pos,neg,cf){
+ var h=v<0?neg:pos,a=Math.abs(v),t,d,r,m;
+ if(cf==='dms'){t=Math.round(a*36000);d=Math.floor(t/36000);r=t-d*36000;m=Math.floor(r/600);r-=m*600;return d+'°'+pad2(m)+'′'+pad2(Math.floor(r/10))+'.'+(r%10)+'″ '+h;}
+ if(cf==='ddm'){t=Math.round(a*60000);d=Math.floor(t/60000);r=t-d*60000;m=Math.floor(r/1000);return d+'°'+pad2(m)+'.'+('00'+(r-m*1000)).slice(-3)+'′ '+h;}
+ return a.toFixed(5)+'° '+h;
+}
+function coordFmt(lat,lon){var cf=units.coord;return coordPart(lat,'N','S',cf)+' · '+coordPart(lon,'E','W',cf);}
 function windFmt(ms){var u=UNITS_SPEED.filter(function(x){return x[0]===units.wind;})[0]||UNITS_SPEED[0];return (ms*u[2]).toFixed(1).replace('.',',')+' '+u[3];}
 function estFmt(d){var t=depthFmt(d);return (t.charAt(0)==='<'?'':'≈ ')+t;}
 var UPANEL=[
@@ -773,7 +791,8 @@ var UPANEL=[
  ['Distanza','dist',UNITS_DIST,function(){return wpFmtDist(5000);}],
  ['Profondità','depth',UNITS_DEPTH,function(){return depthFmt(25);}],
  ['Velocità del vento','wind',UNITS_SPEED,function(){return windFmt(8);}],
- ['Temperatura','temp',UNITS_TEMP,function(){return tempFmt(22);}]
+ ['Temperatura','temp',UNITS_TEMP,function(){return tempFmt(22);}],
+ ['Coordinate','coord',UNITS_COORD,function(){return coordFmt(40.2123,12.6045);}]
 ];
 var UEX={dist:'5 km',depth:'25 m',speed:'5 m/s',temp:'22 °C',wind:'8 m/s'};
 function unitsPanel(){
@@ -781,15 +800,15 @@ function unitsPanel(){
  bd.appendChild(wpH('p',{style:'margin:0 0 10px;color:#456;font-size:calc(13px*var(--fs))',text:'Tocca l’unità che preferisci: vale subito in tutta l’app. Sotto ogni scelta vedi un esempio.'}));
  UPANEL.forEach(function(sp){
   var sec=wpH('div',{class:'usec'}),ex=wpH('div',{class:'uex'}),seg=wpH('div',{class:'chips',role:'group','aria-label':sp[0]}),btns={};
-  function show(){ex.textContent='Esempio: '+UEX[sp[1]]+' → '+sp[3]();}
+  function show(){ex.textContent='Esempio: '+(UEX[sp[1]]?UEX[sp[1]]+' → ':'')+sp[3]();}
   sp[2].forEach(function(o){
    var b=wpH('button',{type:'button',class:o[0]===units[sp[1]]?'sel':'',text:o[1]});
-   b.addEventListener('click',function(){for(var k in btns)btns[k].className='';b.className='sel';units[sp[1]]=o[0];unitsSave();gpsRedo();if(gps.c)gpsRender();show();});
+   b.addEventListener('click',function(){for(var k in btns)btns[k].className='';b.className='sel';units[sp[1]]=o[0];unitsSave();gpsRedo();if(gps.c)gpsRender();updXh();show();});
    btns[o[0]]=b;seg.appendChild(b);
   });
   sec.appendChild(wpH('div',{class:'ut',text:sp[0]}));sec.appendChild(seg);sec.appendChild(ex);show();bd.appendChild(sec);
  });
- bd.appendChild(wpH('small',{style:'display:block;margin-top:4px;color:#456',text:'Le isobate disegnate sulla mappa restano sempre in m. Temperatura e vento sono già salvati: serviranno quando arriveranno queste funzioni. Toccando il riquadro in basso a sinistra puoi cambiare al volo l’unità della velocità.'}));
+ bd.appendChild(wpH('small',{style:'display:block;margin-top:4px;color:#456',text:'Le isobate disegnate sulla mappa restano sempre in m. Temperatura e vento sono già salvati: serviranno quando arriveranno queste funzioni.'}));
 }
 
 // --- Impostazioni: dimensione del testo ---
@@ -1214,7 +1233,7 @@ function wpEdit(id){
  bd.appendChild(wpH('label',{style:'display:block'},['Nome',nm]));
  bd.appendChild(wpH('label',{style:'display:block;margin-top:8px'},['Nota',nt]));
  var icon=w.icon||'flag';bd.appendChild(wpH('div',{style:'margin-top:10px;font-size:calc(13px*var(--fs))'},['Icona']));bd.appendChild(wpIconGrid(icon,function(i){icon=i;}));
- bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:w.lat.toFixed(5)+', '+w.lon.toFixed(5)+' · '+wpDepthTxt(w)+' · '+wpFmtDate(w.t)}));
+ bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:coordFmt(w.lat,w.lon)+' · '+wpDepthTxt(w)+' · '+wpFmtDate(w.t)}));
  var del=wpH('button',{text:'Elimina',class:'wpd',style:'margin-left:6px'}),armed=false;
  del.addEventListener('click',function(){if(!armed){armed=true;del.textContent='Tocca ancora per eliminare';return;}wpDelete(id);wpCloseP();});
  bd.appendChild(wpH('div',null,[
