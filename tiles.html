@@ -16,7 +16,6 @@ body{font-family:"Segoe UI",Helvetica,Arial,sans-serif;color:#0e2230;display:fle
 header{padding:10px 16px;background:#08414f;color:#fff;font-size:17px;font-weight:600}
 main{flex:1;display:flex;min-height:0}
 #map{flex:1;min-width:0}
-aside{width:320px;overflow-y:auto;padding:14px;border-right:1px solid #cfdde3;font-size:14px;line-height:1.45}
 h2{font-size:14px;margin:16px 0 6px}
 h2:first-child{margin-top:0}
 input[type=text],textarea{width:100%;padding:7px;border:1px solid #cfdde3;border-radius:6px;font:inherit}
@@ -74,27 +73,33 @@ label{display:flex;gap:8px;align-items:center;margin:6px 0}
 .trkbar{height:8px;background:#dbe6ea;border-radius:4px;overflow:hidden}
 .trkfill{height:100%;background:#7c3aed}.trkfill.o{background:#e8890c}.trkfill.r{background:#dc2626}
 .gpsr{font-size:14px;font-weight:700;color:#ff8a8a;margin:2px 0 4px}
-@media(max-width:760px){main{flex-direction:column-reverse}aside{width:100%;height:25%;padding:10px 14px}header{padding:6px 12px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+@media(max-width:760px){header{padding:6px 12px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 </style>
 </head>
 <body>
 <header>Isobate – test a livelli di dettaglio (Italia, lotti in corso)</header>
 <main>
-<aside>
- <h2>Profondità da disegnare (m)</h2>
- <textarea id="levels" rows="3">5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500</textarea>
- <label style="display:block">Oltre l'ultima, una isobata ogni (m) – senza limite di profondità<input type="text" id="step" inputmode="numeric" value="500"></label>
- <label><input type="checkbox" id="bands" checked> Colora per profondità</label>
- <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
- <label><input type="checkbox" id="lbl" checked> Scritte di profondità sulle isobate</label>
- <label><input type="checkbox" id="dbg"> Mostra i bordi dei tasselli (diagnosi)</label>
- <button id="redraw">Ridisegna</button>
- <h2>Livelli di dettaglio</h2>
- <p>Le zone <b>tratteggiate</b> sono vicino alla costa dove EMODnet non ha dati: la profondità è solo ipotizzata dai punti vicini.</p>
- <p>Si caricano da soli in base allo zoom: base su tutto il mare, poi medio (da zoom 8) e fine (da zoom 10), solo dove il fondale è meno profondo.</p>
- <div id="status">Carico l'elenco dei tasselli…</div>
- <div class="warn"><b>Solo prova di valutazione.</b> Dati EMODnet, celle fino a ~100 m, quote riferite a LAT. Non usare per la navigazione né per la sicurezza in mare.</div>
-</aside>
+<div id="stash" style="display:none">
+ <div id="g_lines">
+  <h2>Profondità da disegnare (m)</h2>
+  <textarea id="levels" rows="3">5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 300, 500</textarea>
+  <label style="display:block">Oltre l'ultima, una isobata ogni (m) – senza limite di profondità<input type="text" id="step" inputmode="numeric" value="500"></label>
+  <button id="redraw">Ridisegna</button>
+ </div>
+ <div id="g_bands"><label><input type="checkbox" id="bands" checked> Colora per profondità</label></div>
+ <div id="g_dev">
+  <label><input type="checkbox" id="lines" checked> Mostra le isobate</label>
+  <label><input type="checkbox" id="lbl" checked> Scritte di profondità sulle isobate</label>
+  <label><input type="checkbox" id="dbg"> Mostra i bordi dei tasselli (diagnosi)</label>
+  <div id="status">Carico l'elenco dei tasselli…</div>
+ </div>
+ <div id="g_src">
+  <h2>Livelli di dettaglio</h2>
+  <p>Le zone <b>tratteggiate</b> sono vicino alla costa dove EMODnet non ha dati: la profondità è solo ipotizzata dai punti vicini.</p>
+  <p>Si caricano da soli in base allo zoom: base su tutto il mare, poi medio (da zoom 8) e fine (da zoom 10), solo dove il fondale è meno profondo.</p>
+  <div class="warn"><b>Solo prova di valutazione.</b> Dati EMODnet, celle fino a ~100 m, quote riferite a LAT. Non usare per la navigazione né per la sicurezza in mare.</div>
+ </div>
+</div>
 <div id="map"></div>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -807,6 +812,17 @@ function mapPanel(){
  var cur=Math.round((parseFloat(map.getPane('bands').style.opacity)||0)*100),lab=wpH('span',{style:'float:right;font-weight:700',text:cur+'%'});
  bd.appendChild(wpH('p',{style:'margin:0 0 4px;color:#456;font-size:12px'},['Verso sinistra i colori sono più trasparenti, verso destra più intensi.',lab]));
  bd.appendChild(wpH('input',{type:'range',min:'0',max:'100',value:String(cur),style:'width:100%',on:{input:function(e){var v=+e.target.value;map.getPane('bands').style.opacity=v/100;lab.textContent=v+'%';lsSet('isobate_bandop',String(v));}}}));
+ tit('Linee batimetriche');stashPut(bd,'g_lines');
+ tit('Colorazione');stashPut(bd,'g_bands');
+}
+function devPanel(){
+ var bd=wpFrame('Sviluppatore');
+ bd.appendChild(wpH('p',{style:'margin:0 0 6px;color:#456;font-size:12px',text:'Impostazioni di sviluppo: nell’app rilasciata questa scheda non sarà presente.'}));
+ stashPut(bd,'g_dev');
+}
+function srcPanel(){
+ var bd=wpFrame('Fonti');
+ stashPut(bd,'g_src');
 }
 cmpEl=document.createElement('div');cmpEl.id='cmp';cmpEl.title='Orientamento della mappa (tocca per cambiare)';
 cmpEl.innerHTML='<svg width="30" height="30" viewBox="0 0 30 30"><path d="M15 3L21 16H9Z" fill="#e11d48"/><path d="M15 27L9 16H21Z" fill="#8a97a0"/><text x="15" y="12.8" text-anchor="middle" font-size="6.5" font-weight="800" font-family="Arial,sans-serif" fill="#ffffff">N</text></svg>';
@@ -1091,8 +1107,11 @@ var wpP=document.createElement('div');wpP.id='wpp';document.body.appendChild(wpP
 function wpOpenP(){wpP.style.display='flex';if(!wpOpen){wpOpen=true;try{history.pushState({wp:1},'');}catch(e){}}}
 function wpCloseP(fromPop){wpP.style.display='none';if(wpOpen){wpOpen=false;if(!fromPop){try{if(history.state&&history.state.wp)history.back();}catch(e){}}}}
 window.addEventListener('popstate',function(){if(wpOpen)wpCloseP(true);});
+var STASH=['g_lines','g_bands','g_dev','g_src'];
+function stashBack(){var h=document.getElementById('stash');if(!h)return;STASH.forEach(function(id){var e=document.getElementById(id);if(e&&e.parentNode!==h)h.appendChild(e);});}
+function stashPut(bd,id){var e=document.getElementById(id);if(e)bd.appendChild(e);}
 function wpFrame(title){
- wpP.innerHTML='';
+ stashBack();wpP.innerHTML='';
  var bd=wpH('div',{class:'bd'});
  wpP.appendChild(wpH('div',{class:'bar'},[wpH('span',{text:title}),wpH('button',{text:'Chiudi',on:{click:function(){wpCloseP();}}})]));
  wpP.appendChild(bd);wpOpenP();return bd;
@@ -1400,7 +1419,9 @@ var MNU_SVG={
  line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M4 20L20 4"/></svg>',
  units:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17H21M3 17V12M7.5 17V14M12 17V12M16.5 17V14M21 17V12"/><path d="M6 7H18M6 7L8.5 4.5M6 7L8.5 9.5M18 7L15.5 4.5M18 7L15.5 9.5"/></svg>',
  orient:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 5L15 13L12 11.5L9 13Z" fill="currentColor"/></svg>',
- bow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 21V3" stroke-dasharray="1 4.5"/><path d="M8 7L12 3L16 7"/></svg>'
+ bow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 21V3" stroke-dasharray="1 4.5"/><path d="M8 7L12 3L16 7"/></svg>',
+ dev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7L3 12L8 17M16 7L21 12L16 17M14 5L10 19"/></svg>',
+ info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11V17"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor"/></svg>'
 };
 function mnuClose(){menuOpen=false;if(mnuD)mnuD.style.display='none';if(mnuB)mnuB.className=trkCur?'rec':'';}
 function mnuToggle(){
@@ -1426,6 +1447,8 @@ var MenuCtl=L.Control.extend({options:{position:'topleft'},onAdd:function(){
  item('Stile della barca',MNU_SVG.boat,boatPanel);
  item('Linea di rotta',MNU_SVG.line,linePanel);
  item('Linea della prua',MNU_SVG.bow,bowPanel);
+ item('Sviluppatore',MNU_SVG.dev,devPanel);
+ item('Fonti',MNU_SVG.info,srcPanel);
  mnuB.addEventListener('click',function(e){if(e&&e.preventDefault)e.preventDefault();mnuToggle();});
  w.appendChild(mnuB);w.appendChild(mnuD);
  L.DomEvent.disableClickPropagation(w);return w;
