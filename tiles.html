@@ -70,9 +70,7 @@ select{font:inherit;min-height:44px;padding:8px;border:1px solid #b9ccd3;border-
 .chips button.sel{background:#0b5d73;border-color:#0b5d73;color:#fff}
 .chips:not(.big) button.sel::before{content:'\2713\00a0'}
 .chips.big button{border-radius:16px}
-.chips.wrap{flex-wrap:wrap}
-.chips.wrap button{flex:1 0 56px}
-.chips button:disabled{opacity:.35}
+
 .chips button small{display:block;font-size:calc(12px*var(--fs));font-weight:600;margin-top:2px}
 .uex{margin-top:9px;font-size:calc(13px*var(--fs));color:#5b6b75}
 .wpig{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}
@@ -820,13 +818,18 @@ var UPANEL=[
  ['Temperatura','temp',UNITS_TEMP,function(){return tempFmt(22);}],
  ['Coordinate','coord',UNITS_COORD,function(){return coordFmt(40.2123,12.6045);}]
 ];
+function selectRow(items,cur,pick,label,style){
+ var sl=wpH('select',{'aria-label':label||'',style:style||'width:100%'},items.map(function(o){return wpH('option',{value:String(o[0]),text:o[1]});}));
+ sl.value=String(cur);
+ sl.addEventListener('change',function(){pick(sl.value);});
+ return sl;
+}
 function chipRow(items,cur,pick,cls,label){
  var seg=wpH('div',{class:'chips'+(cls?' '+cls:''),role:'group','aria-label':label||''}),btns={};
  function mark(v){for(var k in btns)btns[k].className=(k===String(v))?'sel':'';}
  items.forEach(function(o){
   var b=wpH('button',{type:'button',class:String(o[0])===String(cur)?'sel':''});
   if(o[2])b.innerHTML=o[2];else b.textContent=o[1];
-  if(o[3])b.disabled=true;
   b.addEventListener('click',function(){mark(o[0]);pick(o[0]);});
   btns[String(o[0])]=b;seg.appendChild(b);
  });
@@ -873,8 +876,8 @@ function quickPanel(){
  bd.appendChild(sec);
 }
 
-// --- Fascia personalizzata: evidenzia le zone tra due profondità (stesse soglie delle isobate, mai sotto 5 m) ---
-var BAND_LV=parseLevels().filter(function(v){return v>=5;});
+// --- Fascia personalizzata: evidenzia le zone tra due profondità (stesse soglie delle isobate, da 5 a 5000 m) ---
+var BAND_LV=allLevels(5000).filter(function(v){return v>=5&&v<=5000;});
 var depthBand={min:10,max:50};
 try{var bj=JSON.parse(lsGet('isobate_band')||'null');if(bj&&BAND_LV.indexOf(bj.min)>=0&&BAND_LV.indexOf(bj.max)>=0&&bj.max>bj.min){depthBand.min=bj.min;depthBand.max=bj.max;}}catch(e){}
 if(BAND_LV.indexOf(depthBand.min)<0||BAND_LV.indexOf(depthBand.max)<0){depthBand.min=BAND_LV[0];depthBand.max=BAND_LV[BAND_LV.length-1];}
@@ -885,14 +888,15 @@ function bandPick(which,v){
  bandSet(a,b);
 }
 function bandPanel(){
- var bd=wpFrame('Fascia personalizzata'),last=BAND_LV.length-1,sum=wpH('div',{class:'uex'}),rows={};
+ var bd=wpFrame('Fascia personalizzata'),sum=wpH('div',{class:'uex'}),sels={};
  bd.appendChild(wpH('p',{style:'margin:0 0 10px;color:#456;font-size:calc(13px*var(--fs))',text:'Evidenzia le zone comprese tra due profondità. Utile per individuare rapidamente aree interessanti senza leggere tutte le isobate.'}));
  var s0=wpH('div',{class:'usec'});s0.appendChild(quickCheck('depthBand','Attiva fascia personalizzata'));bd.appendChild(s0);
- function sync(){rows.min.mark(depthBand.min);rows.max.mark(depthBand.max);sum.textContent='Fascia evidenziata: '+depthBand.min+' – '+depthBand.max+' m (valori in m, come le isobate sulla mappa)';}
- [['min','Profondità minima'],['max','Profondità massima']].forEach(function(w){
+ function sync(){sels.min.value=String(depthBand.min);sels.max.value=String(depthBand.max);sum.textContent='Fascia evidenziata: '+depthBand.min+' – '+depthBand.max+' m (valori in m, come le isobate sulla mappa)';}
+ // nel minimo non compare l'ultima soglia, nel massimo non compare la prima: non si possono scegliere
+ [['min','Profondità minima',BAND_LV.slice(0,-1)],['max','Profondità massima',BAND_LV.slice(1)]].forEach(function(w){
   var sec=wpH('div',{class:'usec'});
-  rows[w[0]]=chipRow(BAND_LV.map(function(v,i){return [v,String(v),null,w[0]==='min'?i===last:i===0];}),depthBand[w[0]],function(v){bandPick(w[0],v);sync();},'wrap',w[1]);
-  sec.appendChild(wpH('div',{class:'ut',text:w[1]}));sec.appendChild(rows[w[0]]);bd.appendChild(sec);
+  sels[w[0]]=selectRow(w[2].map(function(v){return [v,v+' m'];}),depthBand[w[0]],function(v){bandPick(w[0],+v);sync();},w[1]);
+  sec.appendChild(wpH('div',{class:'ut',text:w[1]}));sec.appendChild(sels[w[0]]);bd.appendChild(sec);
  });
  var s3=wpH('div',{class:'usec'});s3.appendChild(sum);bd.appendChild(s3);sync();
 }
@@ -1070,13 +1074,7 @@ var MOON_NAMES=['Luna nuova','Luna crescente','Primo quarto','Gibbosa crescente'
 var MOON_EMO=['\uD83C\uDF11','\uD83C\uDF12','\uD83C\uDF13','\uD83C\uDF14','\uD83C\uDF15','\uD83C\uDF16','\uD83C\uDF17','\uD83C\uDF18'];
 function moonPhase(t){var a=((t-MOON_REF)%MOON_SYN+MOON_SYN)%MOON_SYN;return Math.floor(a/MOON_SYN*8+0.5)%8;}
 function wpMoon(w){var m=w.moon;return (typeof m==='number'&&m>=0&&m<8&&m%1===0)?m:moonPhase(w.t||Date.now());}
-function moonSvg(i,sz){
- var D='#2e3d4b',Lt='#f4dc7a',k=i>4?8-i:i,lit='';
- if(i===4)lit='<circle cx="12" cy="12" r="10" fill="'+Lt+'"/>';
- else if(i>0)lit='<path d="M12 2A10 10 0 0 1 12 22A'+[0,7.07,0,7.07][k]+' 10 0 0 '+(k===3?1:0)+' 12 2Z" fill="'+Lt+'"'+(i>4?' transform="translate(24 0) scale(-1 1)"':'')+'/>';
- return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="'+D+'"/>'+lit+'<circle cx="12" cy="12" r="10" fill="none" stroke="#8a97a3" stroke-width="1"/></svg>';
-}
-function wpMoonIcon(w,sz){var e=wpH('span',{style:'flex:none;display:inline-block;line-height:0',role:'img','aria-label':MOON_NAMES[wpMoon(w)]});e.innerHTML=moonSvg(wpMoon(w),sz);return e;}
+function wpMoonIcon(w,sz){var i=wpMoon(w),e=wpH('span',{style:'flex:none;display:inline-block;line-height:1;font-size:'+sz+'px',role:'img','aria-label':MOON_NAMES[i]});e.textContent=MOON_EMO[i];return e;}
 function wpNew(lat,lon,src,name,note,t){
  var x=wpDepthAt(lat,lon),tt=t||Date.now();
  return {id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name:name||wpNextName(),note:note||'',lat:lat,lon:lon,d:x?+x.d.toFixed(1):null,est:x?x.est:false,t:tt,src:src||'map',icon:wpDefaultIcon(),moon:moonPhase(tt)};
@@ -1314,10 +1312,8 @@ function wpEdit(id){
  bd.appendChild(wpH('label',{style:'display:block;margin-top:8px'},['Nota',nt]));
  var icon=w.icon||'flag';bd.appendChild(wpH('div',{style:'margin-top:10px;font-size:calc(13px*var(--fs))'},['Icona']));bd.appendChild(wpIconGrid(icon,function(i){icon=i;}));
  bd.appendChild(wpH('div',{style:'margin-top:10px;font-size:calc(13px*var(--fs))'},['Fase lunare']));
- var mn=wpMoon(w),mic=wpH('span',{style:'flex:none;display:inline-block;line-height:0'}),
-  msel=wpH('select',{'aria-label':'Fase lunare',style:'flex:1;min-width:0;margin:0'},MOON_NAMES.map(function(n,i){return wpH('option',{value:String(i),text:MOON_EMO[i]+' '+n});}));
- msel.value=String(mn);mic.innerHTML=moonSvg(mn,28);
- msel.addEventListener('change',function(){mn=+msel.value;mic.innerHTML=moonSvg(mn,28);});
+ var mn=wpMoon(w),mic=wpMoonIcon({moon:mn},28),
+  msel=selectRow(MOON_NAMES.map(function(n,i){return [i,MOON_EMO[i]+' '+n];}),mn,function(v){mn=+v;mic.textContent=MOON_EMO[mn];mic.setAttribute('aria-label',MOON_NAMES[mn]);},'Fase lunare','flex:1;min-width:0;margin:0');
  bd.appendChild(wpH('div',{style:'display:flex;align-items:center;gap:10px;margin-top:6px'},[mic,msel]));
  bd.appendChild(wpH('small',{style:'display:block;margin:8px 0;color:#456',text:coordFmt(w.lat,w.lon)+' · '+wpDepthTxt(w)+' · '+wpFmtDate(w.t)}));
  var del=wpH('button',{text:'Elimina',class:'wpd',style:'margin-left:6px'}),armed=false;
