@@ -27,10 +27,10 @@ label{display:flex;gap:8px;align-items:center;margin:6px 0}
 .leaflet-tooltip.d{font-weight:700;background:#08414f;color:#fff;border:0}
 #xh{position:absolute;left:50%;top:50%;width:0;height:0;z-index:700;pointer-events:none}
 #xh svg{position:absolute;left:-54px;top:-54px}
-#xh,#xhc{transition:opacity .4s}
-#xht{position:absolute;left:16px;top:7px;white-space:nowrap;font-size:calc(11px*var(--fs));font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000;pointer-events:none}
-#xhc{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);z-index:800;white-space:nowrap;pointer-events:none;font-size:calc(11px*var(--fs));font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000}
-#gpsc{margin-top:2px;font-size:calc(11px*var(--fs));font-weight:600;opacity:.9;white-space:nowrap}
+#xh{transition:opacity .4s}
+#xht{position:absolute;left:16px;top:7px;white-space:nowrap;font-size:calc(22px*var(--fs));font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000;pointer-events:none}
+#xhc{position:absolute;right:16px;top:7px;text-align:right;white-space:nowrap;pointer-events:none;font-size:calc(22px*var(--fs));font-weight:700;line-height:1.1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000,0 0 3px #000}
+#gpsc{margin-top:2px;font-size:calc(22px*var(--fs));line-height:1.15;font-weight:600;opacity:.9;white-space:nowrap}
 #rot{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:50% 50%;transition:transform .35s linear}
 #cmp{position:absolute;right:10px;top:11px;z-index:800;width:42px;height:42px;border-radius:50%;background:#fff;border:2px solid rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;cursor:pointer}
 #cmp svg{width:33px;height:33px;transition:transform .35s linear}
@@ -51,8 +51,8 @@ div.leaflet-control-zoom a{width:33px!important;height:33px!important;line-heigh
 .mnui.rec{color:#dc2626}
 #gpsi{position:absolute;left:10px;bottom:30px;z-index:800;max-width:70%;display:none;pointer-events:auto;background:rgba(8,40,60,.88);color:#fff;border-radius:6px;padding:5px 10px;font-size:calc(13px*var(--fs));line-height:1.3}
 #gpsi small{display:block;font-weight:400;font-size:calc(11px*var(--fs));opacity:.85}
-#gpsv{font-size:calc(22px*var(--fs));font-weight:700;line-height:1.2;margin-bottom:2px}
-#gpsv small{display:inline;font-size:calc(12px*var(--fs));font-weight:400}
+#gpsv{font-size:calc(44px*var(--fs));font-weight:700;line-height:1.2;margin-bottom:2px}
+#gpsv small{display:inline;font-size:calc(24px*var(--fs));font-weight:400}
 .gpsa,.wpic{background:none;border:0}
 .gpsai{width:34px;height:34px;transform-origin:50% 50%;scale:var(--cs,1)}
 .gpsai svg,.wpi svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
@@ -506,7 +506,7 @@ var xhEl=document.createElement('div');xhEl.id='xh';xhEl.style.display='block';
 xhEl.innerHTML='<svg width="108" height="108" viewBox="0 0 108 108"><path d="M54 6v36M54 66v36M6 54h36M66 54h36" stroke="#000" stroke-width="2.8" stroke-linecap="round" opacity=".45" fill="none"/><path d="M54 6v36M54 66v36M6 54h36M66 54h36" stroke="#fff" stroke-width="1.2" stroke-linecap="round" fill="none"/><circle cx="54" cy="54" r="1.2" fill="#fff"/></svg><div id="xht"></div>';
 map.getContainer().appendChild(xhEl);
 var xht=document.getElementById('xht'),xhTimer=0;
-var xhc=document.createElement('div');xhc.id='xhc';map.getContainer().appendChild(xhc);
+var xhc=document.createElement('div');xhc.id='xhc';xhEl.appendChild(xhc);
 function xhText(p){
  if(!p||p.none)return 'Nessun dato<small>in questo punto</small>';
  if(p.land===true)return 'Terraferma';
@@ -520,11 +520,11 @@ function xhShort(p){
  if(p.f>0)return estFmt(p.f);
  return 'N/A';
 }
-function updXh(){xhTimer=0;var c=map.getCenter();xht.textContent=xhShort(probe(c.lat,c.lng));xhc.textContent=coordFmt(c.lat,c.lng);}
+function updXh(){xhTimer=0;var c=map.getCenter();xht.textContent=xhShort(probe(c.lat,c.lng));xhc.innerHTML=coordFmt(c.lat,c.lng,'<br>');}
 function schedXh(){if(!xhTimer)xhTimer=setTimeout(updXh,120);}
 map.on('move zoom moveend zoomend',schedXh);
 var xhHideT=0;
-function xhShow(on){xhEl.style.opacity=on?'1':'0';xhc.style.opacity=on?'1':'0';}
+function xhShow(on){xhEl.style.opacity=on?'1':'0';}
 function xhWake(){xhShow(true);clearTimeout(xhHideT);xhHideT=setTimeout(function(){xhShow(false);},10000);}
 map.on('dragstart drag zoomstart zoomend',xhWake);
 map.getContainer().addEventListener('pointerdown',xhWake,{passive:true});
@@ -604,7 +604,7 @@ function gpsRender(){
  var vh=gpsVec(c),ac=c.accuracy||0,us=unitSpeed(),u=us[3],k=us[2];
  var vs=vh.v===null?'—':(vh.v<GPS_MINV?0:vh.v*k).toFixed(1).replace('.',',');
  var rot=vh.h!==null?' · '+Math.round(vh.h)+'° '+GPS_DIR[Math.round(vh.h/45)%8]:'';
- gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div><div id="gpsc">'+coordFmt(c.latitude,c.longitude)+'</div>'+wpGoText()+trkText()+'<b>Mia posizione</b> · precisione ±'+Math.round(ac)+' m<br>'+xhText(probe(c.latitude,c.longitude))+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));
+ gpsMsg('<div id="gpsv">'+vs+' <small>'+u+rot+'</small></div><div id="gpsc">'+coordFmt(c.latitude,c.longitude,'<br>')+'</div>'+wpGoText()+trkText()+'<div>'+xhText(probe(c.latitude,c.longitude))+'</div>'+(ac>50?'<small>precisione GPS bassa: profondità poco affidabile</small>':''));
 }
 function gpsLayers(){
  var c=gps.c,ll=gps.last,ac=c.accuracy||0;
@@ -783,7 +783,7 @@ function coordPart(v,pos,neg,cf){
  if(cf==='ddm'){t=Math.round(a*60000);d=Math.floor(t/60000);r=t-d*60000;m=Math.floor(r/1000);return d+'°'+pad2(m)+'.'+('00'+(r-m*1000)).slice(-3)+'′ '+h;}
  return a.toFixed(5)+'° '+h;
 }
-function coordFmt(lat,lon){var cf=units.coord;return coordPart(lat,'N','S',cf)+' · '+coordPart(lon,'E','W',cf);}
+function coordFmt(lat,lon,sep){var cf=units.coord;return coordPart(lat,'N','S',cf)+(sep||' · ')+coordPart(lon,'E','W',cf);}
 function windFmt(ms){var u=UNITS_SPEED.filter(function(x){return x[0]===units.wind;})[0]||UNITS_SPEED[0];return (ms*u[2]).toFixed(1).replace('.',',')+' '+u[3];}
 function estFmt(d){var t=depthFmt(d);return (t.charAt(0)==='<'?'':'≈ ')+t;}
 var UPANEL=[
